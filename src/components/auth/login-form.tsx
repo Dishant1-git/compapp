@@ -8,12 +8,13 @@ import { login, type FormState } from "@/lib/auth/actions";
 import { FormMessage } from "./form-message";
 import { PasswordInput } from "./password-input";
 
-export function LoginForm() {
+export function LoginForm({ next }: { next?: string }) {
   const [state, action, pending] = useActionState<FormState, FormData>(login, {});
 
   return (
     <form action={action} noValidate className="space-y-5">
       <FormMessage message={state.message} />
+      {next && <input type="hidden" name="next" value={next} />}
 
       <div>
         <Label htmlFor="email">Email</Label>
@@ -38,7 +39,7 @@ export function LoginForm() {
             Password
           </Label>
           <Link
-            href="/forgot-password"
+            href="/forgot-password" prefetch={false}
             className="text-sm font-medium text-muted-foreground hover:text-foreground"
           >
             Forgot password?

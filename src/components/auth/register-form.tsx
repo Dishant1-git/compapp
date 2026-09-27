@@ -106,11 +106,11 @@ export function RegisterForm({ defaultPlatform }: { defaultPlatform?: PlatformId
           />
           <span className="text-muted-foreground">
             I agree to the{" "}
-            <Link href="/terms" className="font-medium text-foreground underline underline-offset-4">
+            <Link href="/terms" prefetch={false} className="font-medium text-foreground underline underline-offset-4">
               Terms
             </Link>{" "}
             and{" "}
-            <Link href="/privacy" className="font-medium text-foreground underline underline-offset-4">
+            <Link href="/privacy" prefetch={false} className="font-medium text-foreground underline underline-offset-4">
               Privacy Policy
             </Link>
             .

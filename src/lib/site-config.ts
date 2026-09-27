@@ -8,6 +8,8 @@ export type Platform = {
   tagline: string;
   description: string;
   features: string[];
+  /** Where the platform lives once it's built; otherwise its card links to sign-up. */
+  href?: string;
 };
 
 export const siteConfig = {
@@ -15,6 +17,7 @@ export const siteConfig = {
   description:
     "Plan trips with like-minded strangers and find companions — one account, two platforms.",
   nav: [
+    { label: "Stranger Trips", href: "/trips" },
     { label: "Platforms", href: "/#platforms" },
     { label: "How it works", href: "/#how-it-works" },
   ],
@@ -22,13 +25,14 @@ export const siteConfig = {
     {
       id: "trips",
       name: "Stranger Trips",
+      href: "/trips",
       tagline: "Plan trips with new people",
       description:
         "Create or join group trips with travellers who share your destination, dates and budget.",
       features: [
-        "Browse and join open trips",
-        "Plan itineraries together",
-        "Split costs transparently",
+        "Browse and book group trips",
+        "See who's going and your match %",
+        "Find travel buddies going your way",
       ],
     },
     {
@@ -43,5 +47,5 @@ export const siteConfig = {
         "Safe in-app chat",
       ],
     },
-  ] satisfies Platform[],
+  ] as Platform[],
 };

@@ -26,3 +26,16 @@ export function FieldError({ id, messages }: { id: string; messages?: string[] }
     </p>
   );
 }
+
+export function Select({ className, ...props }: ComponentProps<"select">) {
+  return <select className={cn(inputClasses, "appearance-auto pr-10", className)} {...props} />;
+}
+
+export function Textarea({ className, ...props }: ComponentProps<"textarea">) {
+  return (
+    <textarea
+      className={cn(inputClasses, "h-auto min-h-28 py-3 leading-relaxed", className)}
+      {...props}
+    />
+  );
+}

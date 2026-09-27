@@ -8,7 +8,7 @@ const columns = [
     title: "Platforms",
     links: siteConfig.platforms.map((p) => ({
       label: p.name,
-      href: `/register?platform=${p.id}`,
+      href: p.href ?? `/register?platform=${p.id}`,
     })),
   },
   {
