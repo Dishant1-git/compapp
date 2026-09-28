@@ -1,7 +1,9 @@
 import "server-only";
 import { Types } from "mongoose";
 import { getAgencyDashboard, getAgencyProfile } from "@/lib/agency/queries";
+import { imageUrl } from "@/lib/companion/types";
 import { connectDB } from "@/lib/db/mongoose";
+import { CompanionProfile } from "@/lib/db/models/companion-profile";
 import { Agency, type AgencyStatus } from "@/lib/db/models/agency";
 import { Booking } from "@/lib/db/models/booking";
 import { Report } from "@/lib/db/models/report";
@@ -225,7 +227,7 @@ export async function listUsers(filters: { q?: string; role?: string; status?: s
   return users.map((u) => ({
     id: String(u._id),
     name: u.name,
-    email: u.email,
+    email: u.email ?? "",
     role: u.role,
     status: u.status,
     city: u.city ?? undefined,
@@ -367,7 +369,7 @@ export async function listBookings(filters: {
     amount: b.amount,
     createdAt: b.createdAt.toISOString(),
     cancelledBy: b.cancelledBy ?? undefined,
-    traveller: b.user ? { id: String(b.user._id), name: b.user.name, email: b.user.email } : null,
+    traveller: b.user ? { id: String(b.user._id), name: b.user.name, email: b.user.email ?? "" } : null,
     trip: b.trip
       ? {
           id: String(b.trip._id),
@@ -425,4 +427,50 @@ export async function listReports(filters: {
       : null,
     trip: r.trip ? { slug: r.trip.slug, title: r.trip.title } : null,
   }));
+}
+
+export type AdminSelfieReview = {
+  profileId: string;
+  user: { id: string; name: string; phone?: string };
+  selfieId: string;
+  selfieUrl: string;
+  pose: string;
+  photoUrls: string[];
+  status: "pending" | "verified" | "rejected";
+  note?: string;
+  /** From the automatic face check; lower = more alike. */
+  matchDistance?: number;
+  submittedAt?: string;
+  reviewedAt?: string;
+};
+
+/** Companion selfies to check against each person's profile photos. Oldest first when pending. */
+export async function listSelfieReviews(status: AdminSelfieReview["status"]): Promise<AdminSelfieReview[]> {
+  await connectDB();
+  const profiles = await CompanionProfile.find({ "selfie.status": status, "selfie.image": { $exists: true } })
+    .sort({ "selfie.submittedAt": status === "pending" ? 1 : -1 })
+    .limit(PAGE)
+    .populate<{ user: LeanUser | null }>("user", "name phone")
+    .lean();
+
+  return profiles.map((p) => ({
+    profileId: String(p._id),
+    user: p.user
+      ? { id: String(p.user._id), name: p.user.name, phone: p.user.phone ?? undefined }
+      : { id: "", name: "Deleted user" },
+    selfieId: String(p.selfie!.image),
+    selfieUrl: imageUrl(String(p.selfie!.image)),
+    pose: p.selfie?.pose ?? "",
+    photoUrls: p.photos.map((id) => imageUrl(String(id))),
+    status,
+    note: p.selfie?.note ?? undefined,
+    matchDistance: p.selfie?.matchDistance ?? undefined,
+    submittedAt: iso(p.selfie?.submittedAt),
+    reviewedAt: iso(p.selfie?.reviewedAt),
+  }));
+}
+
+export async function countPendingSelfies() {
+  await connectDB();
+  return CompanionProfile.countDocuments({ "selfie.status": "pending" });
 }

@@ -47,7 +47,7 @@ export function PlatformsSection() {
               </ul>
 
               <ButtonLink
-                href={platform.href ?? `/register?platform=${platform.id}`}
+                href={platform.href ?? platform.joinHref ?? `/register?platform=${platform.id}`}
                 variant="outline"
                 className="mt-8 w-full sm:w-auto sm:self-start"
               >

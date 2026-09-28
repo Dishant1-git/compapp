@@ -31,7 +31,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   return {
     id: String(user._id),
     name: user.name,
-    email: user.email,
+    email: user.email ?? "",
     role: user.role as Role,
     personality: user.personality ?? [],
   };

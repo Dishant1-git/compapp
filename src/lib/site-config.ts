@@ -10,6 +10,8 @@ export type Platform = {
   features: string[];
   /** Where the platform lives once it's built; otherwise its card links to sign-up. */
   href?: string;
+  /** Its own sign-up flow, used by the "Join" button instead of the generic sign-up. */
+  joinHref?: string;
 };
 
 export const siteConfig = {
@@ -38,6 +40,7 @@ export const siteConfig = {
     {
       id: "companion",
       name: "Companion",
+      joinHref: "/companion/join",
       tagline: "Find someone to go with",
       description:
         "Match with verified companions for events, activities or everyday outings near you.",

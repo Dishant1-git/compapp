@@ -87,6 +87,23 @@
 
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+
+  /* Slide transitions for step-by-step flows (Companion sign-up). */
+  --animate-slide-in-right: slide-in-right 0.3s ease-out;
+  --animate-slide-in-left: slide-in-left 0.3s ease-out;
+
+  @keyframes slide-in-right {
+    from {
+      opacity: 0;
+      transform: translateX(2.5rem);
+    }
+  }
+  @keyframes slide-in-left {
+    from {
+      opacity: 0;
+      transform: translateX(-2.5rem);
+    }
+  }
 }
 
 @layer base {

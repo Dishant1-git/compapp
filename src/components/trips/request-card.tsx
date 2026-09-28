@@ -36,9 +36,11 @@ export function RequestCard({
       {contact && (
         <div className="mt-3 rounded-lg bg-muted p-3 text-sm">
           <p className="font-medium">{contact.name}</p>
-          <a href={`mailto:${contact.email}`} className="block underline underline-offset-4">
-            {contact.email}
-          </a>
+          {contact.email && (
+            <a href={`mailto:${contact.email}`} className="block underline underline-offset-4">
+              {contact.email}
+            </a>
+          )}
           {contact.phone && (
             <a href={`tel:${contact.phone}`} className="block underline underline-offset-4">
               {contact.phone}

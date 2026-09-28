@@ -3,7 +3,7 @@
 One Next.js app for two platforms, both backed by one shared MongoDB database:
 
 - **Stranger Trips** (`/trips`): book group trips with new people, find travel buddies
-- **Companion**: find someone to go with (not built yet)
+- **Companion** (`/companion`): find someone to go with (sign-up and profiles built; matching next)
 
 ## Getting started
 
@@ -75,8 +75,40 @@ cancellations and upheld reports (`src/lib/trips/trust.ts`).
 
 - Online payments: bookings start `unpaid` and agencies mark them paid by hand. Add Razorpay or Cashfree in `bookTrip`.
 - Real-time chat: the group chat polls every 4 seconds. Swap in WebSockets or Pusher when needed.
-- Phone OTP, email and ID verification (the `verification` flags exist on the user model)
+- Email and ID verification (the `verification` flags exist on the user model). Phone OTP is built for Companion.
 - Email or push delivery of notifications (in-app only for now)
+
+## Companion
+
+Click **Join Companion** on the home page (or go to `/companion/join`). Sign-up is one
+question per slide, saved as you go, so leaving and coming back resumes where you were:
+
+name → mobile number → OTP → birthday → look (height, body type) → location → gender →
+sexual orientation → interests → drinking & smoking → photos → live selfie → profile preview → Done.
+
+- **Accounts:** the verified phone number *is* the account; no email or password needed.
+  Entering the same number again signs you back in. If you're already signed in with
+  email, the number is added to that account instead.
+- **OTP:** 6 digits, valid 5 minutes, 5 tries per code, 30 s between resends, 5 texts per
+  number per hour (`src/lib/companion/otp.ts`). Texts go out through Fast2SMS, MSG91 or
+  Twilio, whichever has keys in `.env.local` (`src/lib/companion/sms.ts`). In development
+  without one, the code is printed in the terminal and shown on screen.
+- **Photos and selfie** are resized in the browser and stored in MongoDB
+  (`CompanionImage`), served from `/api/companion/images/[id]`. Selfies are only visible to
+  their owner and admins.
+- **Selfie verification:** the selfie is taken live with the camera and a random pose, then
+  compared with the profile photos on the server in a few seconds, free, with no API keys
+  (face-api on TensorFlow.js/WebAssembly, `src/lib/companion/face-match.ts`). Face distance
+  ≤ 0.45 is verified instantly, > 0.60 rejected with a reason; anything in between (or an
+  error) waits for an admin at **`/admin/verifications`**. The profile preview and
+  `/companion` only unlock once verified. The pose isn't checked automatically; admins see
+  it on uncertain cases. Thresholds live in `src/lib/companion/verification.ts`.
+- Camera access needs `https` or `localhost`. To test on a phone, use a tunnel with https.
+
+| Route | What it does |
+|---|---|
+| `/companion/join` | The sign-up slides. `?edit=1` edits a finished profile. |
+| `/companion` | Your finished profile. |
 
 ## Folder structure
 
@@ -91,6 +123,8 @@ src/
 │   ├── agency/               # Agency area (own layout + mobile tab bar)
 │   ├── notifications/
 │   ├── api/trips/[id]/messages/  # Group-chat polling endpoint
+│   ├── api/companion/images/[id]/ # Companion photos and selfies
+│   ├── companion/            # Companion: /companion and /companion/join
 │   └── trips/                # Stranger Trips (own layout + mobile tab bar)
 │       ├── page.tsx          # Explore
 │       ├── [slug]/           # Trip detail
@@ -103,18 +137,17 @@ src/
 │   ├── layout/               # Headers, app nav, notification bell
 │   ├── admin/  agency/
 │   ├── home/  auth/
+│   ├── companion/            # Join-flow slides, profile card
 │   └── trips/                # All Stranger Trips components
 └── lib/
     ├── db/                   # Shared DB connection + Mongoose models
     ├── auth/                 # Session, DAL (requireRole, getMyAgency), auth actions
     ├── admin/  agency/       # queries.ts (reads) + actions.ts (writes) per area
     ├── trips/                # queries, actions, chat, cancel, matching, trust, …
+    ├── companion/            # Sign-up actions, OTP, queries, verification hook
     ├── notifications.ts      # notify() + reads
     └── form-utils.ts         # Shared Server Action parsing
 ```
-
-The Companion platform should get its own `src/app/companion/`, `src/components/companion/`
-and `src/lib/companion/`, reusing `lib/db` and `lib/auth`.
 
 ## Theming
 

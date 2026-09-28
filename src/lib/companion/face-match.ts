@@ -1,0 +1,74 @@
+import "server-only";
+import path from "node:path";
+
+/**
+ * Free, self-hosted face matching with face-api (TensorFlow.js on WebAssembly,
+ * so there's no native build step and no external service or API key).
+ * Models ship inside the npm package and load once, on the first check
+ * (about 0.3 s); each photo then takes roughly a second.
+ */
+
+type FaceApi = typeof import("@vladmandic/face-api/dist/face-api.node-wasm.js");
+
+export type Face = { descriptor: Float32Array; score: number; width: number };
+
+const MODULES = path.join(process.cwd(), "node_modules");
+/** Images are scaled to fit this box before detection; plenty for a face and much faster. */
+const MAX_SIDE = 640;
+
+let ready: Promise<FaceApi> | undefined;
+
+function load() {
+  ready ??= (async () => {
+    const tf = await import("@tensorflow/tfjs");
+    const wasm = await import("@tensorflow/tfjs-backend-wasm");
+    const faceapi: FaceApi = await import("@vladmandic/face-api/dist/face-api.node-wasm.js");
+
+    // Serve the .wasm binaries from node_modules instead of a CDN.
+    wasm.setWasmPaths(path.join(MODULES, "@tensorflow/tfjs-backend-wasm/dist") + path.sep);
+    await tf.setBackend("wasm");
+    await tf.ready();
+
+    const models = path.join(MODULES, "@vladmandic/face-api/model");
+    await faceapi.nets.ssdMobilenetv1.loadFromDisk(models);
+    await faceapi.nets.faceLandmark68Net.loadFromDisk(models);
+    await faceapi.nets.faceRecognitionNet.loadFromDisk(models);
+    return faceapi;
+  })().catch((error) => {
+    ready = undefined; // try again next time
+    throw error;
+  });
+  return ready;
+}
+
+/** Every face found in an image (JPEG, PNG or WebP), largest first. */
+export async function findFaces(image: Buffer): Promise<Face[]> {
+  const faceapi = await load();
+  const { default: sharp } = await import("sharp");
+  const { data, info } = await sharp(image)
+    .rotate() // respect EXIF orientation
+    .resize(MAX_SIDE, MAX_SIDE, { fit: "inside", withoutEnlargement: true })
+    .removeAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  const tensor = faceapi.tf.tensor3d(new Uint8Array(data), [info.height, info.width, 3], "int32");
+  try {
+    const results = await faceapi
+      .detectAllFaces(tensor as never, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
+      .withFaceLandmarks()
+      .withFaceDescriptors();
+    return results
+      .map((r) => ({ descriptor: r.descriptor, score: r.detection.score, width: r.detection.box.width }))
+      .sort((a, b) => b.width - a.width);
+  } finally {
+    tensor.dispose();
+  }
+}
+
+/** 0 = identical; the same person is usually under 0.45, different people over 0.55. */
+export function faceDistance(a: Float32Array, b: Float32Array) {
+  let sum = 0;
+  for (let i = 0; i < a.length; i++) sum += (a[i] - b[i]) ** 2;
+  return Math.sqrt(sum);
+}

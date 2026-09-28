@@ -32,7 +32,7 @@ export async function login(_prev: FormState, formData: FormData): Promise<FormS
 
   await connectDB();
   const user = await User.findOne({ email }).select("+passwordHash role status");
-  if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+  if (!user?.passwordHash || !(await bcrypt.compare(password, user.passwordHash))) {
     return { message: "Incorrect email or password.", values };
   }
   if (user.status === "suspended") {

@@ -31,7 +31,7 @@ export default async function AdminUserPage({ params }: PageProps<"/admin/users/
       </Link>
       <AdminHeader
         title={p.name}
-        description={`${p.email} · joined ${formatDate(u.createdAt)}`}
+        description={`${p.email || p.phone || "No email"} · joined ${formatDate(u.createdAt)}`}
         actions={
           <div className="flex gap-2">
             <Badge className="capitalize">{u.role === "user" ? "traveller" : u.role}</Badge>

@@ -12,6 +12,7 @@ const links = [
   { href: "/admin/trips", label: "Trips", icon: ICONS.trips },
   { href: "/admin/bookings", label: "Bookings", icon: ICONS.bookings },
   { href: "/admin/reports", label: "Reports", icon: ICONS.reports },
+  { href: "/admin/verifications", label: "Verification", icon: ICONS.verify },
 ];
 
 function useIsActive() {

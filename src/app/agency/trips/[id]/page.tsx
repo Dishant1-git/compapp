@@ -100,7 +100,7 @@ export default async function AgencyTripPage({ params }: PageProps<"/agency/trip
                   <div className="flex gap-2">
                     <dt className="w-24 shrink-0 text-muted-foreground">Email</dt>
                     <dd className="min-w-0 truncate">
-                      <a className="underline underline-offset-4" href={`mailto:${t.email}`}>{t.email}</a>
+                      {t.email ? <a className="underline underline-offset-4" href={`mailto:${t.email}`}>{t.email}</a> : "—"}
                     </dd>
                   </div>
                   <div className="flex gap-2">

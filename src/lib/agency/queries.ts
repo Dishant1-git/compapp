@@ -140,7 +140,7 @@ export async function getAgencyTrip(agencyId: string, tripId: string): Promise<A
         bookingId: String(b._id),
         userId: String(u._id),
         name: u.name,
-        email: u.email,
+        email: u.email ?? "",
         phone: u.phone ?? undefined,
         age: ageFromBirthYear(u.birthYear),
         gender: u.gender ?? undefined,

@@ -319,7 +319,7 @@ export async function getProfile(userId: string): Promise<Profile | null> {
 
   return {
     name: user.name,
-    email: user.email,
+    email: user.email ?? "",
     phone: user.phone ?? "",
     city: user.city ?? "",
     birthYear: user.birthYear ?? null,
@@ -481,7 +481,7 @@ function toRequestView(
     },
     contact:
       status === "accepted"
-        ? { name: person.name, email: person.email, phone: person.phone ?? undefined }
+        ? { name: person.name, email: person.email ?? "", phone: person.phone ?? undefined }
         : undefined,
   };
 }
