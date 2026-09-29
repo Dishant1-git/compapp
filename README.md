@@ -5,6 +5,8 @@ One Next.js app for two platforms, both backed by one shared MongoDB database:
 - **Stranger Trips** (`/trips`): book group trips with new people, find travel buddies
 - **Companion** (`/companion`): find someone to go with (sign-up and profiles built; matching next)
 
+For a deep dive into how everything works, see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
 ## Getting started
 
 Requires Node 20+ and MongoDB (local or Atlas).
