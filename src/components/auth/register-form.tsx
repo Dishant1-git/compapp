@@ -9,7 +9,7 @@ import { siteConfig, type PlatformId } from "@/lib/site-config";
 import { FormMessage } from "./form-message";
 import { PasswordInput } from "./password-input";
 
-export function RegisterForm({ defaultPlatform }: { defaultPlatform?: PlatformId }) {
+export function RegisterForm({ defaultPlatform, next }: { defaultPlatform?: PlatformId; next?: string }) {
   const [state, action, pending] = useActionState<FormState, FormData>(register, {});
   const selected: PlatformId[] =
     state.values?.platforms ??
@@ -18,6 +18,7 @@ export function RegisterForm({ defaultPlatform }: { defaultPlatform?: PlatformId
   return (
     <form action={action} noValidate className="space-y-5">
       <FormMessage message={state.message} />
+      {next && <input type="hidden" name="next" value={next} />}
 
       <div>
         <Label htmlFor="name">Full name</Label>

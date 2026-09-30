@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BookingPanel } from "@/components/trips/booking-panel";
 import { CompatibilityBadge } from "@/components/trips/compatibility-badge";
+import { TripCover } from "@/components/trips/trip-cover";
 import { GroupList } from "@/components/trips/group-list";
 import { InterestButton } from "@/components/trips/interest-button";
 import { SafetyPanel } from "@/components/trips/safety-panel";
@@ -10,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
 import { TagList } from "@/components/trips/tag-list";
 import { Container } from "@/components/ui/container";
-import { getCurrentUser } from "@/lib/auth/dal";
+import { requireUser } from "@/lib/auth/dal";
 import { durationLabel, formatDateRange } from "@/lib/trips/format";
 import { getProfile, getTrip } from "@/lib/trips/queries";
 
@@ -21,7 +22,7 @@ export async function generateMetadata({ params }: PageProps<"/trips/[slug]">): 
 
 export default async function TripPage({ params }: PageProps<"/trips/[slug]">) {
   const { slug } = await params;
-  const user = await getCurrentUser();
+  const user = await requireUser(`/trips/${slug}`);
   const trip = await getTrip(slug, user);
   if (!trip) notFound();
 
@@ -60,15 +61,17 @@ export default async function TripPage({ params }: PageProps<"/trips/[slug]">) {
         </p>
       )}
 
-      <header className="mt-4">
-        <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-          <span>
-            {trip.origin} → {trip.destination}
-            {trip.region && `, ${trip.region}`}
-          </span>
-          <CompatibilityBadge value={trip.compatibility} />
-        </div>
-        <h1 className="mt-2 text-3xl font-bold tracking-tight text-balance sm:text-4xl">{trip.title}</h1>
+      <TripCover
+        destination={trip.destination}
+        label={`${trip.origin} → ${trip.destination}${trip.region ? `, ${trip.region}` : ""}`}
+        size="hero"
+        className="reveal mt-4 aspect-[4/3] rounded-xl sm:aspect-[21/9]"
+      >
+        <CompatibilityBadge value={trip.compatibility} />
+      </TripCover>
+
+      <header className="mt-6 sm:mt-8">
+        <h1 className="text-4xl leading-[1.05] tracking-tight text-balance sm:text-5xl">{trip.title}</h1>
         <p className="mt-3 text-base">
           {dates}
           <span className="text-muted-foreground"> · {durationLabel(trip.startDate, trip.endDate)}</span>

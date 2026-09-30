@@ -55,10 +55,10 @@ export function StepForm({
 
   return (
     <form onSubmit={submit} noValidate className="flex flex-1 flex-col">
-      <h1 ref={heading} tabIndex={-1} className="text-2xl font-bold tracking-tight text-balance outline-none sm:text-3xl">
+      <h1 ref={heading} tabIndex={-1} className="text-4xl leading-[1.05] font-medium tracking-tight text-balance outline-none sm:text-5xl">
         {title}
       </h1>
-      {description && <div className="mt-2 text-muted-foreground">{description}</div>}
+      {description && <div className="mt-3 leading-relaxed text-muted-foreground">{description}</div>}
 
       <div className="mt-8 flex-1 space-y-6">{children}</div>
 

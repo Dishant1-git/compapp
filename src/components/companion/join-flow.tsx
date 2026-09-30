@@ -16,7 +16,7 @@ import {
   SexualityStep,
   type StepProps,
 } from "./about-steps";
-import { NameStep, OtpStep, PhoneStep, type SentCode } from "./account-steps";
+import { OtpStep, PhoneStep, type SentCode } from "./account-steps";
 import { PhotoStep } from "./photo-step";
 import { ProfileCard } from "./profile-card";
 import { SelfieStep } from "./selfie-step";
@@ -52,8 +52,8 @@ const PROFILE_STEPS: Partial<Record<JoinStep, (props: StepProps) => React.ReactN
 };
 
 /**
- * The Companion sign-up, one question per slide:
- * name → phone → code → birthday → look → location → gender → orientation →
+ * Companion onboarding for a signed-in account, one question per slide:
+ * phone → code (only if the number isn't verified yet) → birthday → look → location → gender → orientation →
  * interests → habits → photos → live selfie → preview.
  * Each slide saves as you go, so leaving and coming back resumes where you were.
  */
@@ -133,9 +133,6 @@ export function JoinFlow({
           direction === "forward" ? "motion-safe:animate-slide-in-right" : "motion-safe:animate-slide-in-left",
         )}
       >
-        {step === "name" && (
-          <NameStep name={draft.name} onChange={(name) => update({ name })} onDone={next} />
-        )}
         {step === "phone" && (
           <PhoneStep
             onSent={(s) => {
@@ -146,7 +143,6 @@ export function JoinFlow({
         )}
         {step === "otp" && sent && (
           <OtpStep
-            name={draft.name}
             sent={sent}
             onResent={setSent}
             onChangeNumber={back}

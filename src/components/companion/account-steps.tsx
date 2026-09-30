@@ -3,48 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { FieldError, Input, Label, Select } from "@/components/ui/input";
 import { sendCode, verifyCode, type VerifyResult } from "@/lib/companion/actions";
-import { COUNTRY_CODES, maskPhone } from "@/lib/companion/constants";
+import { COUNTRY_CODES, maskPhone } from "@/lib/phone";
 import { StepForm } from "./step-form";
 
 export type SentCode = { phone: string; devCode?: string; sentAt: number };
 
 const RESEND_SECONDS = 30;
-
-export function NameStep({
-  name,
-  onChange,
-  onDone,
-}: {
-  name: string;
-  onChange: (name: string) => void;
-  onDone: () => void;
-}) {
-  return (
-    <StepForm
-      title="What's your name?"
-      description="This is how you'll appear on Companion. You can use just your first name."
-      onSubmit={async () =>
-        name.trim().length >= 2 ? { ok: true } : { ok: false, error: "Enter your name." }
-      }
-      onDone={onDone}
-      canSubmit={name.trim().length > 0}
-    >
-      <div>
-        <Label htmlFor="companion-name">First name</Label>
-        <Input
-          id="companion-name"
-          autoComplete="given-name"
-          autoCapitalize="words"
-          placeholder="Your name"
-          maxLength={50}
-          value={name}
-          onChange={(e) => onChange(e.target.value)}
-          autoFocus
-        />
-      </div>
-    </StepForm>
-  );
-}
 
 export function PhoneStep({ onSent }: { onSent: (sent: SentCode) => void }) {
   const [countryCode, setCountryCode] = useState<string>(COUNTRY_CODES[0].code);
@@ -54,7 +18,7 @@ export function PhoneStep({ onSent }: { onSent: (sent: SentCode) => void }) {
   return (
     <StepForm
       title="What's your mobile number?"
-      description="We'll text you a 6-digit code to check it's really you. Your number is never shown on your profile."
+      description="Companion needs a verified number. We'll text you a 6-digit code. Your number is never shown on your profile."
       pendingLabel="Sending code…"
       submitLabel="Send code"
       canSubmit={number.replace(/\D/g, "").length >= 7}
@@ -102,13 +66,11 @@ export function PhoneStep({ onSent }: { onSent: (sent: SentCode) => void }) {
 }
 
 export function OtpStep({
-  name,
   sent,
   onResent,
   onChangeNumber,
   onVerified,
 }: {
-  name: string;
   sent: SentCode;
   onResent: (sent: SentCode) => void;
   onChangeNumber: () => void;
@@ -148,7 +110,7 @@ export function OtpStep({
       pendingLabel="Verifying…"
       canSubmit={code.length === 6}
       onSubmit={async () => {
-        const result = await verifyCode({ name, phone: sent.phone, code });
+        const result = await verifyCode({ phone: sent.phone, code });
         if (result.ok) verified.current = result;
         return result.ok ? { ok: true } : result;
       }}

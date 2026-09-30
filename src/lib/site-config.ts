@@ -8,10 +8,10 @@ export type Platform = {
   tagline: string;
   description: string;
   features: string[];
-  /** Where the platform lives once it's built; otherwise its card links to sign-up. */
-  href?: string;
-  /** Its own sign-up flow, used by the "Join" button instead of the generic sign-up. */
-  joinHref?: string;
+  /** Where it lives. Signed-out visitors are sent to log in first, then brought back. */
+  href: string;
+  /** Label of its button on the home page. */
+  cta: string;
 };
 
 export const siteConfig = {
@@ -20,6 +20,7 @@ export const siteConfig = {
     "Plan trips with like-minded strangers and find companions — one account, two platforms.",
   nav: [
     { label: "Stranger Trips", href: "/trips" },
+    { label: "Companion", href: "/companion" },
     { label: "Platforms", href: "/#platforms" },
     { label: "How it works", href: "/#how-it-works" },
   ],
@@ -28,6 +29,7 @@ export const siteConfig = {
       id: "trips",
       name: "Stranger Trips",
       href: "/trips",
+      cta: "Explore Stranger Trips",
       tagline: "Plan trips with new people",
       description:
         "Create or join group trips with travellers who share your destination, dates and budget.",
@@ -40,7 +42,8 @@ export const siteConfig = {
     {
       id: "companion",
       name: "Companion",
-      joinHref: "/companion/join",
+      href: "/companion",
+      cta: "Join Companion",
       tagline: "Find someone to go with",
       description:
         "Match with verified companions for events, activities or everyday outings near you.",

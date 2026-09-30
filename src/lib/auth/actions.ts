@@ -6,8 +6,11 @@ import { connectDB } from "@/lib/db/mongoose";
 import { Agency } from "@/lib/db/models/agency";
 import { User } from "@/lib/db/models/user";
 import { notify } from "@/lib/notifications";
+import { normalizePhone } from "@/lib/phone";
 import type { PlatformId } from "@/lib/site-config";
-import { homeFor, safeNext, type Role } from "./dal";
+import { afterSignUp, homeFor, productOf, safeNext, type Role } from "./dal";
+import { sendOtp } from "./otp";
+import { phoneOwner, signInWithPhone, SUSPENDED } from "./phone";
 import { createSession, deleteSession } from "./session";
 
 export type FormState = {
@@ -74,8 +77,62 @@ export async function register(_prev: FormState, formData: FormData): Promise<Fo
   });
 
   await createSession({ userId: String(user._id), role: user.role });
-  // New Stranger Trips users go straight to setting up their travel profile.
-  redirect(platforms.includes("trips") ? "/trips/profile?welcome=1" : "/");
+  // Onboarding for the product they came for, then back to where they were going.
+  redirect(afterSignUp(formData.get("next"), platforms));
+}
+
+// ─── Phone number + one-time code ────────────────────────────────────────────
+
+type PhoneMode = "login" | "signup";
+
+/** Text a sign-in code. Logging in needs an existing account, so no text is wasted on a typo. */
+export async function sendPhoneCode(input: {
+  countryCode: string;
+  number: string;
+  mode: PhoneMode;
+}): Promise<{ ok: true; phone: string; devCode?: string } | { ok: false; error: string; retryAfter?: number }> {
+  const phone = normalizePhone(String(input.countryCode), String(input.number));
+  if (!phone) return { ok: false, error: "Enter a valid mobile number." };
+
+  if (input.mode === "login") {
+    const owner = await phoneOwner(phone);
+    if (!owner) return { ok: false, error: "No account uses this number yet. Create one instead." };
+    if (owner.status === "suspended") return { ok: false, error: SUSPENDED };
+  }
+
+  const sent = await sendOtp(phone);
+  return sent.ok ? { ok: true, phone, devCode: sent.devCode } : sent;
+}
+
+/**
+ * Check the code and sign in, then go where they were headed. Signing up with a
+ * number that already has an account just signs in to it: the code proves it's theirs.
+ */
+export async function verifyPhoneCode(input: {
+  phone: string;
+  code: string;
+  mode: PhoneMode;
+  name?: string;
+  next?: string;
+}): Promise<{ ok: false; error: string }> {
+  const phone = String(input.phone ?? "");
+  const code = String(input.code ?? "").trim();
+  const name = String(input.name ?? "").trim().replace(/\s+/g, " ");
+  if (!/^\+[1-9]\d{7,14}$/.test(phone)) return { ok: false, error: "Start again with a valid mobile number." };
+  if (!/^\d{6}$/.test(code)) return { ok: false, error: "Enter the 6-digit code." };
+  if (input.mode === "signup" && name.length < 2) return { ok: false, error: "Go back and enter your name." };
+
+  const product = productOf(safeNext(input.next, ""));
+  const platforms = product ? [product] : [];
+  const result = await signInWithPhone(
+    phone,
+    code,
+    input.mode === "signup" ? { name: name.slice(0, 80), platforms } : undefined,
+  );
+  if (!result.ok) return result;
+
+  await createSession({ userId: result.userId, role: result.role });
+  redirect(result.created ? afterSignUp(input.next, platforms) : safeNext(input.next, homeFor(result.role as Role)));
 }
 
 const PHONE_RE = /^\+?[0-9][0-9\s-]{7,15}$/;

@@ -57,10 +57,11 @@ export function TripsDesktopNav() {
           href={link.href}
           aria-current={isActive(link.href) ? "page" : undefined}
           className={cn(
-            "rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+            // Active tab: a burnt-orange underline, drawn left to right.
+            "relative px-3 py-2 text-sm font-medium transition-colors duration-300 after:absolute after:inset-x-3 after:-bottom-0.5 after:h-0.5 after:origin-left after:rounded-full after:bg-highlight after:transition-transform after:duration-500 after:ease-(--ease-out)",
             isActive(link.href)
-              ? "bg-muted text-foreground"
-              : "text-muted-foreground hover:text-foreground",
+              ? "text-foreground after:scale-x-100"
+              : "text-muted-foreground after:scale-x-0 hover:text-foreground hover:after:scale-x-100",
           )}
         >
           {link.label}
@@ -85,8 +86,8 @@ export function TripsBottomNav() {
               href={link.href}
               aria-current={isActive(link.href) ? "page" : undefined}
               className={cn(
-                "flex h-16 flex-col items-center justify-center gap-1 text-xs font-medium",
-                isActive(link.href) ? "text-foreground" : "text-muted-foreground",
+                "flex h-16 flex-col items-center justify-center gap-1 text-xs font-medium transition-colors",
+                isActive(link.href) ? "text-highlight-ink" : "text-muted-foreground",
               )}
             >
               <Icon d={link.icon} />

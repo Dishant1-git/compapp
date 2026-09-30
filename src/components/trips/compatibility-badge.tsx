@@ -11,12 +11,13 @@ export function CompatibilityBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold",
-        value >= 60 ? "bg-primary text-primary-foreground" : "bg-muted text-foreground",
+        "inline-flex items-center gap-1.5 rounded-full bg-card px-2.5 py-1 text-xs font-semibold",
+        value >= 60 ? "text-highlight-ink" : "text-muted-foreground",
         className,
       )}
       title="How well your travel personality matches this trip and group"
     >
+      {value >= 60 && <span aria-hidden className="size-1.5 rounded-full bg-highlight" />}
       {value}% match
     </span>
   );

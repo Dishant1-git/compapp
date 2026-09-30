@@ -10,7 +10,8 @@ import path from "node:path";
 
 type FaceApi = typeof import("@vladmandic/face-api/dist/face-api.node-wasm.js");
 
-export type Face = { descriptor: Float32Array; score: number; width: number };
+/** `share` is the face's width as a fraction of the image width; `age` is a rough estimate. */
+export type Face = { descriptor: Float32Array; score: number; width: number; share: number; age: number };
 
 const MODULES = path.join(process.cwd(), "node_modules");
 /** Images are scaled to fit this box before detection; plenty for a face and much faster. */
@@ -18,7 +19,8 @@ const MAX_SIDE = 640;
 
 let ready: Promise<FaceApi> | undefined;
 
-function load() {
+/** Load TensorFlow (WebAssembly) and the face models once; also used by photo moderation. */
+export function loadModels() {
   ready ??= (async () => {
     const tf = await import("@tensorflow/tfjs");
     const wasm = await import("@tensorflow/tfjs-backend-wasm");
@@ -33,6 +35,7 @@ function load() {
     await faceapi.nets.ssdMobilenetv1.loadFromDisk(models);
     await faceapi.nets.faceLandmark68Net.loadFromDisk(models);
     await faceapi.nets.faceRecognitionNet.loadFromDisk(models);
+    await faceapi.nets.ageGenderNet.loadFromDisk(models);
     return faceapi;
   })().catch((error) => {
     ready = undefined; // try again next time
@@ -43,7 +46,7 @@ function load() {
 
 /** Every face found in an image (JPEG, PNG or WebP), largest first. */
 export async function findFaces(image: Buffer): Promise<Face[]> {
-  const faceapi = await load();
+  const faceapi = await loadModels();
   const { default: sharp } = await import("sharp");
   const { data, info } = await sharp(image)
     .rotate() // respect EXIF orientation
@@ -57,9 +60,16 @@ export async function findFaces(image: Buffer): Promise<Face[]> {
     const results = await faceapi
       .detectAllFaces(tensor as never, new faceapi.SsdMobilenetv1Options({ minConfidence: 0.5 }))
       .withFaceLandmarks()
-      .withFaceDescriptors();
+      .withFaceDescriptors()
+      .withAgeAndGender();
     return results
-      .map((r) => ({ descriptor: r.descriptor, score: r.detection.score, width: r.detection.box.width }))
+      .map((r) => ({
+        descriptor: r.descriptor,
+        score: r.detection.score,
+        width: r.detection.box.width,
+        share: r.detection.box.width / info.width,
+        age: r.age,
+      }))
       .sort((a, b) => b.width - a.width);
   } finally {
     tensor.dispose();

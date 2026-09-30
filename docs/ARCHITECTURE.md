@@ -5,6 +5,9 @@ and where to change things. Read top to bottom once; afterwards use the table of
 as a reference.
 
 > Last updated: 28 Sep 2026. Covers Next.js 16.3, React 19.2, Mongoose 9, Tailwind 4.
+>
+> For the target one-account, many-products design and the plan to get there, see
+> [PLATFORM-ARCHITECTURE.md](PLATFORM-ARCHITECTURE.md).
 
 ## Contents
 

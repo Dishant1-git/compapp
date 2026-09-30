@@ -2,17 +2,20 @@ import Link from "next/link";
 import type { ComponentProps } from "react";
 import { cn } from "@/lib/utils";
 
-type Variant = "primary" | "secondary" | "outline" | "ghost";
+type Variant = "primary" | "accent" | "secondary" | "outline" | "ghost";
 type Size = "sm" | "md" | "lg";
 
+// Pill buttons in every world; colours come from the world's tokens.
 const base =
-  "inline-flex items-center justify-center gap-2 rounded-lg font-medium whitespace-nowrap transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50";
+  "inline-flex items-center justify-center gap-2 rounded-full font-medium whitespace-nowrap transition-[background-color,color,border-color,transform] duration-300 ease-(--ease-out) active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-50";
 
 const variants: Record<Variant, string> = {
-  primary: "bg-primary text-primary-foreground hover:bg-primary/90",
+  primary: "bg-primary text-primary-foreground hover:bg-primary/85",
+  // The world's signature colour: gold, burnt orange or champagne.
+  accent: "bg-highlight text-highlight-foreground hover:bg-highlight/85",
   secondary: "bg-secondary text-secondary-foreground hover:bg-accent",
-  outline: "border border-input bg-background hover:bg-muted",
-  ghost: "hover:bg-muted",
+  outline: "border border-input bg-transparent hover:border-foreground/40 hover:bg-foreground/5",
+  ghost: "hover:bg-foreground/5",
 };
 
 // Heights keep touch targets at 40px+ on mobile.

@@ -2,12 +2,13 @@
 
 import type { UpdateQuery } from "mongoose";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/dal";
-import { createSession } from "@/lib/auth/session";
-import { connectDB } from "@/lib/db/mongoose";
+import { sendOtp } from "@/lib/auth/otp";
+import { linkPhone, phoneOwner } from "@/lib/auth/phone";
 import { CompanionImage } from "@/lib/db/models/companion-image";
 import { CompanionProfile, type CompanionProfileDoc } from "@/lib/db/models/companion-profile";
-import { User, ensureUserEmailIndex, type UserDoc } from "@/lib/db/models/user";
+import { User, type UserDoc } from "@/lib/db/models/user";
 import { dateInput } from "@/lib/form-utils";
+import { normalizePhone } from "@/lib/phone";
 import {
   BODY_TYPES,
   COMPANION_GENDERS,
@@ -27,38 +28,30 @@ import {
   SMOKING,
   ageFrom,
   isOption,
-  normalizePhone,
 } from "./constants";
-import { checkOtp, sendOtp } from "./otp";
+import { moderatePhoto } from "./moderation";
 import { getCompanionAccount, getCompanionDraft } from "./queries";
 import { imageUrl, resumeStep, type ActionResult, type CompanionDraft, type SelfieStatus } from "./types";
 import { verifySelfie } from "./verification";
 
 const fail = (error: string) => ({ ok: false as const, error });
+const SIGNED_OUT = "Your session ended. Refresh the page and log in again.";
 
-/** Another verified account already using this number, if any. */
-async function phoneOwner(phone: string) {
-  return User.findOne({ phone, "verification.phone": true }).select("_id status role").lean();
-}
-
-// ─── Account: phone number + one-time code ───────────────────────────────────
+// ─── Phone: Companion needs a verified number on the signed-in account ───────
 
 export async function sendCode(input: {
   countryCode: string;
   number: string;
 }): Promise<{ ok: true; phone: string; devCode?: string } | { ok: false; error: string; retryAfter?: number }> {
+  const viewer = await getCurrentUser();
+  if (!viewer) return fail(SIGNED_OUT);
   const phone = normalizePhone(String(input.countryCode), String(input.number));
   if (!phone) return fail("Enter a valid mobile number.");
 
-  await connectDB();
-  const viewer = await getCurrentUser();
-  if (viewer) {
-    const owner = await phoneOwner(phone);
-    if (owner && String(owner._id) !== viewer.id) {
-      return fail("This number is linked to another account. Log out and continue with it instead.");
-    }
+  const owner = await phoneOwner(phone);
+  if (owner && String(owner._id) !== viewer.id) {
+    return fail("This number is linked to another account. Log out and log in with it instead.");
   }
-
   const sent = await sendOtp(phone);
   return sent.ok ? { ok: true, phone, devCode: sent.devCode } : sent;
 }
@@ -67,60 +60,20 @@ export type VerifyResult =
   | { ok: true; draft: CompanionDraft; finished: boolean }
   | { ok: false; error: string };
 
-/**
- * Check the code, then sign in: attach the number to the signed-in account,
- * sign in to the account that already owns it, or create a new account.
- */
-export async function verifyCode(input: {
-  name: string;
-  phone: string;
-  code: string;
-}): Promise<VerifyResult> {
-  const name = String(input.name ?? "").trim().replace(/\s+/g, " ");
+/** Check the code and attach the number to the signed-in account. */
+export async function verifyCode(input: { phone: string; code: string }): Promise<VerifyResult> {
+  const viewer = await getCurrentUser();
+  if (!viewer) return fail(SIGNED_OUT);
   const phone = String(input.phone ?? "");
   const code = String(input.code ?? "").trim();
   if (!/^\+[1-9]\d{7,14}$/.test(phone)) return fail("Start again with a valid mobile number.");
   if (!/^\d{6}$/.test(code)) return fail("Enter the 6-digit code.");
 
-  const checked = await checkOtp(phone, code);
-  if (!checked.ok) return checked;
+  const linked = await linkPhone(viewer.id, phone, code);
+  if (!linked.ok) return linked;
+  await User.updateOne({ _id: viewer.id }, { $addToSet: { platforms: "companion" } });
 
-  const viewer = await getCurrentUser();
-  const owner = await phoneOwner(phone);
-  let userId: string;
-  let role: string;
-
-  if (viewer) {
-    if (owner && String(owner._id) !== viewer.id) return fail("This number is linked to another account.");
-    await User.updateOne(
-      { _id: viewer.id },
-      {
-        $set: { phone, "verification.phone": true, ...(name.length >= 2 && { name }) },
-        $addToSet: { platforms: "companion" },
-      },
-    );
-    userId = viewer.id;
-    role = viewer.role;
-  } else if (owner) {
-    if (owner.status === "suspended") return fail("This account has been suspended. Contact support for help.");
-    await User.updateOne({ _id: owner._id }, { $addToSet: { platforms: "companion" } });
-    userId = String(owner._id);
-    role = owner.role;
-  } else {
-    if (name.length < 2) return fail("Go back and enter your name.");
-    await ensureUserEmailIndex();
-    const user = await User.create({
-      name,
-      phone,
-      platforms: ["companion"],
-      verification: { phone: true },
-    });
-    userId = String(user._id);
-    role = user.role;
-  }
-
-  await createSession({ userId, role });
-  const state = await getCompanionDraft(userId);
+  const state = await getCompanionDraft(viewer.id);
   if (!state) return fail("Something went wrong. Please try again.");
   return { ok: true, draft: state.draft, finished: state.active && state.draft.selfie?.status === "verified" };
 }
@@ -135,7 +88,6 @@ async function companionUser(): Promise<CurrentUser | null> {
   return account?.phoneVerified ? viewer : null;
 }
 
-const SIGNED_OUT = "Your session ended. Refresh the page and verify your number again.";
 
 /** Save profile fields, and optionally mirror some onto the shared account (see User). */
 async function saveProfile(
@@ -256,6 +208,15 @@ export async function uploadPhoto(
   const profile = await CompanionProfile.findOne({ user: viewer.id }).select("photos").lean();
   if ((profile?.photos.length ?? 0) >= MAX_PHOTOS) return fail(`You can add up to ${MAX_PHOTOS} photos.`);
 
+  let verdict;
+  try {
+    verdict = await moderatePhoto(image.data);
+  } catch (error) {
+    console.error("Automatic photo check failed", error);
+    return fail("We couldn't check your photo just now. Try again in a minute.");
+  }
+  if (!verdict.ok) return fail(verdict.reason);
+
   const doc = await CompanionImage.create({
     owner: viewer.id,
     kind: "photo",
@@ -298,11 +259,14 @@ export async function submitSelfie(
   const profile = await CompanionProfile.findOne({ user: viewer.id }).select("photos selfie").lean();
   if (!profile?.photos.length) return fail("Add a profile photo first.");
 
-  const found = await CompanionImage.find({ _id: { $in: profile.photos }, owner: viewer.id }).select("+data");
-  // Profile order, so the main photo is compared first.
-  const order = profile.photos.map(String);
-  const photos = found.sort((a, b) => order.indexOf(String(a._id)) - order.indexOf(String(b._id)));
-  const { status, note, distance } = await verifySelfie({ selfie: image.data, photos: photos.map((p) => p.data) });
+  let decision;
+  try {
+    decision = await verifySelfie({ selfie: image.data, photos: await photoData(viewer.id, profile.photos) });
+  } catch (error) {
+    console.error("Automatic selfie check failed", error);
+    return fail("We couldn't check your selfie just now. Try again in a minute.");
+  }
+  const { status, note, distance } = decision;
 
   const doc = await CompanionImage.create({
     owner: viewer.id,
@@ -322,8 +286,7 @@ export async function submitSelfie(
           note,
           matchDistance: distance,
           submittedAt: new Date(),
-          // Decided automatically; pending ones wait for an admin.
-          reviewedAt: status === "pending" ? undefined : new Date(),
+          reviewedAt: new Date(), // decided automatically
         },
       },
     },
@@ -336,13 +299,47 @@ export async function submitSelfie(
   return { ok: true, selfie: { status, url: imageUrl(String(doc._id)), note } };
 }
 
-/** Current review state of the latest selfie; polled while it's pending. */
+/**
+ * Current review state of the latest selfie; polled while it's pending.
+ * Pending selfies are left over from when unsure checks waited for an admin,
+ * so they're decided automatically here.
+ */
 export async function getSelfieStatus(): Promise<{ status: SelfieStatus; note?: string } | null> {
   const viewer = await companionUser();
   if (!viewer) return null;
-  const profile = await CompanionProfile.findOne({ user: viewer.id }).select("selfie").lean();
-  const status = profile?.selfie?.status;
-  return status ? { status: status as SelfieStatus, note: profile.selfie?.note ?? undefined } : null;
+  const profile = await CompanionProfile.findOne({ user: viewer.id }).select("photos selfie").lean();
+  const selfie = profile?.selfie;
+  if (!profile || !selfie?.status) return null;
+  if (selfie.status !== "pending" || !selfie.image) {
+    return { status: selfie.status as SelfieStatus, note: selfie.note ?? undefined };
+  }
+
+  const shot = await CompanionImage.findOne({ _id: selfie.image, owner: viewer.id, kind: "selfie" }).select("+data");
+  if (!shot) return { status: "pending" };
+  let decision;
+  try {
+    decision = await verifySelfie({ selfie: shot.data, photos: await photoData(viewer.id, profile.photos) });
+  } catch (error) {
+    console.error("Automatic selfie re-check failed", error);
+    return { status: "pending" }; // tried again on the next poll
+  }
+  const { status, note, distance } = decision;
+  // Only if it's still the same selfie, so a retake taken meanwhile wins.
+  const updated = await CompanionProfile.updateOne(
+    { user: viewer.id, "selfie.image": selfie.image, "selfie.status": "pending" },
+    { $set: { "selfie.status": status, "selfie.note": note, "selfie.matchDistance": distance, "selfie.reviewedAt": new Date() } },
+  );
+  if (updated.modifiedCount) {
+    await User.updateOne({ _id: viewer.id }, { $set: { "verification.identity": status === "verified" } });
+  }
+  return { status, note };
+}
+
+/** Image data of the profile photos, main photo first, for the face match. */
+async function photoData(userId: string, ids: unknown[]) {
+  const found = await CompanionImage.find({ _id: { $in: ids }, owner: userId }).select("+data");
+  const order = ids.map(String);
+  return found.sort((a, b) => order.indexOf(String(a._id)) - order.indexOf(String(b._id))).map((p) => p.data);
 }
 
 // ─── Done ────────────────────────────────────────────────────────────────────

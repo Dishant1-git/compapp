@@ -20,8 +20,8 @@ export function TagList({
           className={cn(
             "rounded-full border px-2.5 py-0.5 text-xs font-medium",
             highlight.includes(tag)
-              ? "border-primary bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground",
+              ? "border-highlight bg-highlight text-highlight-foreground"
+              : "border-border bg-transparent text-muted-foreground",
           )}
         >
           {personalityLabel(tag)}

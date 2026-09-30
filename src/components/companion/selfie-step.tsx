@@ -11,15 +11,15 @@ import { StepForm } from "./step-form";
 
 type Shot = { blob: Blob; url: string };
 
-const POLL_MS = 8000;
+const POLL_MS = 5000;
 
 /**
  * Live selfie for photo verification. It only uses the camera (no file picker),
  * and asks for a random pose, so a saved photo can't be passed off as live.
  * The server compares it with the profile photos in a few seconds; clear
- * results come back straight away. If the check isn't sure, an admin reviews it
- * and this slide waits, checking back every few seconds. The profile preview
- * stays locked until the selfie is verified.
+ * results come back straight away, and unsure ones ask for a clearer retake, so
+ * no admin is needed. A selfie still pending from before is re-checked while
+ * this slide waits. The profile preview stays locked until it's verified.
  */
 export function SelfieStep({ draft, update, onDone }: StepProps) {
   const video = useRef<HTMLVideoElement>(null);
@@ -38,7 +38,7 @@ export function SelfieStep({ draft, update, onDone }: StepProps) {
 
   useEffect(() => () => void (shot && URL.revokeObjectURL(shot.url)), [shot]);
 
-  // While in review, check back until an admin (or the verification service) decides.
+  // While pending, check back; each check re-runs the automatic match.
   useEffect(() => {
     if (status !== "pending") return;
     const timer = setInterval(async () => {
@@ -96,10 +96,10 @@ export function SelfieStep({ draft, update, onDone }: StepProps) {
         verified
           ? "Your selfie matches your photos. Your profile will show a verified badge."
           : waiting
-            ? "Our automatic check wasn't sure, so a person is taking a look. Your profile unlocks as soon as it's approved."
+            ? "We're comparing it with your photos. This only takes a few seconds."
             : "Take a quick live selfie. We compare it with your photos so everyone on Companion knows profiles are real. It's never shown on your profile."
       }
-      submitLabel={verified ? "See my profile" : waiting ? "Waiting for verification…" : "Submit selfie"}
+      submitLabel={verified ? "See my profile" : waiting ? "Checking…" : "Submit selfie"}
       pendingLabel={shot ? "Checking your selfie…" : "Loading…"}
       canSubmit={verified || !!shot}
       hideSubmit={!!stream}
@@ -170,11 +170,9 @@ export function SelfieStep({ draft, update, onDone }: StepProps) {
               className="size-8 shrink-0 animate-spin rounded-full border-[3px] border-muted border-t-primary"
             />
             <div className="text-sm">
-              <p className="font-medium">Being reviewed by our team</p>
+              <p className="font-medium">Checking your selfie</p>
               <p className="mt-0.5 text-muted-foreground">
-                This usually takes a few hours. You can close this page. Come back to this link and
-                sign in with your number, and you&apos;ll pick up here. Or retake the selfie in
-                better light to try the automatic check again.
+                If it takes more than a minute, retake the selfie to check again.
               </p>
             </div>
           </div>

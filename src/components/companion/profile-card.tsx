@@ -11,7 +11,10 @@ import {
 } from "@/lib/companion/constants";
 import type { CompanionDraft } from "@/lib/companion/types";
 
-/** How a Companion profile looks to other people. Swipe (or scroll) through the photos. */
+/**
+ * How a Companion profile looks to other people: an editorial portrait with the
+ * name set over the photo, then the details in layers. Swipe (or scroll) the photos.
+ */
 export function ProfileCard({ profile }: { profile: CompanionDraft }) {
   const firstName = profile.name.split(" ")[0];
   const age = profile.birthDate ? ageFrom(profile.birthDate) : null;
@@ -27,7 +30,7 @@ export function ProfileCard({ profile }: { profile: CompanionDraft }) {
   ].filter((b): b is string => !!b);
 
   return (
-    <article className="overflow-hidden rounded-2xl border bg-card text-card-foreground shadow-sm">
+    <article className="reveal overflow-hidden rounded-xl border bg-card text-card-foreground">
       <div className="relative">
         <div className="flex snap-x snap-mandatory overflow-x-auto [scrollbar-width:none]" tabIndex={0} aria-label="Photos">
           {profile.photos.map((photo, i) => (
@@ -36,56 +39,64 @@ export function ProfileCard({ profile }: { profile: CompanionDraft }) {
               key={photo.id}
               src={photo.url}
               alt={`${firstName}, photo ${i + 1} of ${profile.photos.length}`}
-              className="aspect-[3/4] w-full shrink-0 snap-center object-cover"
+              className="aspect-[4/5] w-full shrink-0 snap-center object-cover"
             />
           ))}
-          {!profile.photos.length && <div className="aspect-[3/4] w-full bg-muted" />}
+          {!profile.photos.length && <div className="aspect-[4/5] w-full bg-muted" />}
         </div>
 
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 via-black/30 to-transparent px-5 pt-16 pb-5 text-white">
-          <p className="flex items-center gap-2 text-3xl font-bold tracking-tight">
+        {/* Plum, not black, so the photo melts into the card. */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 bg-gradient-to-t from-card via-card/60 to-transparent px-6 pt-28 pb-6">
+          <p className="flex items-baseline gap-3 font-display text-5xl leading-none font-medium">
             {firstName}
-            {age !== null && <span className="font-normal">{age}</span>}
+            {age !== null && <span className="text-3xl text-muted-foreground italic">{age}</span>}
             {verified && (
-              <svg viewBox="0 0 24 24" className="size-6" aria-label="Verified">
+              <svg viewBox="0 0 24 24" className="size-6 self-center text-primary" aria-label="Verified">
                 <circle cx="12" cy="12" r="10" fill="currentColor" />
-                <path d="M7.5 12.5l3 3 6-6.5" fill="none" stroke="black" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />
+                <path
+                  d="M7.5 12.5l3 3 6-6.5"
+                  fill="none"
+                  stroke="var(--companion-bg)"
+                  strokeWidth={2.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
               </svg>
             )}
           </p>
-          {profile.city && <p className="mt-1 text-sm text-white/90">Lives in {profile.city}</p>}
+          {profile.city && <p className="eyebrow mt-3 text-highlight">{profile.city}</p>}
         </div>
 
         {profile.photos.length > 1 && (
-          <div aria-hidden className="absolute inset-x-0 top-2 flex justify-center gap-1 px-4">
+          <div aria-hidden className="absolute inset-x-0 top-3 flex justify-center gap-1 px-5">
             {profile.photos.map((p) => (
-              <span key={p.id} className="h-1 flex-1 rounded-full bg-white/60" />
+              <span key={p.id} className="h-0.5 flex-1 rounded-full bg-white/50" />
             ))}
           </div>
         )}
       </div>
 
-      <div className="space-y-5 p-5">
-        {basics.length > 0 && (
+      <div className="space-y-6 px-6 pb-7">
+        {profile.hobbies.length > 0 && (
           <section>
-            <h2 className="text-sm font-medium text-muted-foreground">Basics</h2>
-            <ul className="mt-2 flex flex-wrap gap-2">
-              {basics.map((b) => (
-                <li key={b} className="rounded-full border px-3 py-1 text-sm">
-                  {b}
+            <h2 className="eyebrow font-sans text-muted-foreground">Into</h2>
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {profile.hobbies.map((h) => (
+                <li key={h} className="rounded-full border border-highlight/30 bg-highlight/10 px-3.5 py-1.5 text-sm text-highlight-ink">
+                  {optionLabel(HOBBIES, h)}
                 </li>
               ))}
             </ul>
           </section>
         )}
 
-        {profile.hobbies.length > 0 && (
+        {basics.length > 0 && (
           <section>
-            <h2 className="text-sm font-medium text-muted-foreground">Interests</h2>
-            <ul className="mt-2 flex flex-wrap gap-2">
-              {profile.hobbies.map((h) => (
-                <li key={h} className="rounded-full bg-muted px-3 py-1 text-sm font-medium">
-                  {optionLabel(HOBBIES, h)}
+            <h2 className="eyebrow font-sans text-muted-foreground">Basics</h2>
+            <ul className="mt-3 flex flex-wrap gap-2">
+              {basics.map((b) => (
+                <li key={b} className="rounded-full border px-3.5 py-1.5 text-sm text-muted-foreground">
+                  {b}
                 </li>
               ))}
             </ul>

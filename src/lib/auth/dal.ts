@@ -76,7 +76,42 @@ export function homeFor(role: Role) {
   return role === "admin" ? "/admin" : role === "agency" ? "/agency" : "/trips";
 }
 
-/** Only allow same-site relative redirects (blocks "//evil.com" and absolute URLs). */
+/**
+ * The return URL (`?next=`) if it's safe to send someone to, else `fallback`.
+ * Only same-site paths: blocks "//evil.com", "/\evil.com" and absolute URLs, and
+ * any whitespace or control characters (browsers strip tabs and newlines, which
+ * would turn "/\t/evil.com" into "//evil.com"). The sign-in pages themselves are
+ * refused too, so signing in can never loop back to them.
+ */
 export function safeNext(value: unknown, fallback = "/trips") {
-  return typeof value === "string" && /^\/(?![/\\])/.test(value) ? value : fallback;
+  if (typeof value !== "string" || value.length > 2000) return fallback;
+  if (!/^\/(?![/\\])/.test(value) || /[\s\\\x00-\x1f\x7f]/.test(value)) return fallback;
+  if (/^\/(login|register)(?:[/?#]|$)/.test(value)) return fallback;
+  return value;
+}
+
+/** Which product a same-site path belongs to, if any. */
+export function productOf(path: string): "trips" | "companion" | null {
+  if (/^\/trips(?:[/?#]|$)/.test(path)) return "trips";
+  if (/^\/companion(?:[/?#]|$)/.test(path)) return "companion";
+  return null;
+}
+
+/**
+ * Where a brand-new account goes: the product's onboarding first, then back to
+ * what they asked for. Companion's pages send unfinished profiles to its own
+ * onboarding (/companion/join) themselves, so its URLs are returned as they are.
+ */
+export function afterSignUp(next: unknown, platforms: readonly string[] = []) {
+  const target = safeNext(next, "");
+  const product = target
+    ? productOf(target)
+    : platforms.includes("trips")
+      ? "trips"
+      : platforms.includes("companion")
+        ? "companion"
+        : null;
+  if (product === "trips") return `/trips/profile?welcome=1&next=${encodeURIComponent(target || "/trips")}`;
+  if (product === "companion") return target || "/companion";
+  return target || homeFor("user");
 }

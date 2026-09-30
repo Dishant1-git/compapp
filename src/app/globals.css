@@ -2,65 +2,200 @@
 
 /*
  * Design tokens.
- * The color scheme is intentionally neutral for now. To apply a brand palette,
- * change the values below (and the dark-mode overrides) — every component uses
- * these semantic names (bg-primary, text-muted-foreground, border-border, ...),
- * so nothing else needs to change.
+ *
+ * 1. Palettes: the raw colours of each world.
+ *      --brand-*      Midnight Luxury · landing page and sign-in
+ *      --trips-*      Terra / Expedition · Stranger Trips
+ *      --companion-*  Velvet Social · Companion
+ * 2. Semantic tokens (--background, --primary, --highlight, …): what every
+ *    component uses. A world maps them from its palette under
+ *    [data-theme="brand" | "trips" | "companion"], set on its layout by
+ *    <Theme> (src/components/layout/theme.tsx). Screens without a world
+ *    (admin, agency, notifications) keep the neutral "console" values, with
+ *    dark mode.
+ *
+ * Change a colour here and it changes everywhere; components never hard-code
+ * palette colours.
  */
 :root {
+  /* Midnight Luxury */
+  --brand-bg: #08090d;
+  --brand-surface: #11131a;
+  --brand-text: #f5f3ee;
+  --brand-muted: #8d909a;
+  --brand-accent: #c8a96b;
+  --brand-accent-light: #e6d2a3;
+  --brand-border: #242631;
+
+  /* Terra / Expedition */
+  --trips-bg: #f3f0e7;
+  --trips-surface: #fffdf7;
+  --trips-primary: #17251f;
+  --trips-secondary: #52635a;
+  --trips-accent: #d66a3d;
+  --trips-accent-ink: #a34620; /* burnt orange dark enough for small text (5.3:1) */
+  --trips-accent-2: #d9a441;
+  --trips-border: #d9d5c9;
+
+  /* Velvet Social */
+  --companion-bg: #130f18;
+  --companion-surface: #1e1725;
+  --companion-card: #261d2d;
+  --companion-text: #faf6f0;
+  --companion-muted: #aaa0ae;
+  --companion-accent: #d8a7b1;
+  --companion-accent-2: #b99ac7;
+  --companion-highlight: #f0cfa5;
+  --companion-border: #3a2e42;
+
+  /* Console: neutral semantic tokens for admin, agency and shared pages. */
   --background: #ffffff;
   --foreground: #171717;
-
   --card: #ffffff;
   --card-foreground: #171717;
-
   --primary: #171717;
   --primary-foreground: #fafafa;
-
   --secondary: #f4f4f5;
   --secondary-foreground: #18181b;
-
   --muted: #f4f4f5;
   --muted-foreground: #71717a;
-
   --accent: #e4e4e7;
   --accent-foreground: #18181b;
-
+  /* The world's signature accent: fills, active states, small emphasis. */
+  --highlight: #171717;
+  --highlight-foreground: #fafafa;
+  /* The signature accent, dark or light enough for small text on the background. */
+  --highlight-ink: #171717;
   --destructive: #dc2626;
-
   --border: #e4e4e7;
   --input: #d4d4d8;
   --ring: #a1a1aa;
 
+  /* Shared across every world: one radius and one motion curve family. */
   --radius: 0.75rem;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --font-heading: var(--font-geist-sans);
+  --font-body: var(--font-geist-sans);
+  --reveal-animation: reveal-soft 0.6s var(--ease-out) both;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     --background: #0a0a0a;
     --foreground: #ededed;
-
     --card: #141414;
     --card-foreground: #ededed;
-
     --primary: #ededed;
     --primary-foreground: #0a0a0a;
-
     --secondary: #1f1f1f;
     --secondary-foreground: #ededed;
-
     --muted: #1a1a1a;
     --muted-foreground: #a1a1aa;
-
     --accent: #262626;
     --accent-foreground: #ededed;
-
+    --highlight: #ededed;
+    --highlight-foreground: #0a0a0a;
+    --highlight-ink: #ededed;
     --destructive: #f87171;
-
     --border: #262626;
     --input: #3f3f46;
     --ring: #52525b;
   }
+}
+
+/* ── Worlds ─────────────────────────────────────────────────────────────── */
+
+[data-theme="brand"] {
+  color-scheme: dark;
+  --background: var(--brand-bg);
+  --foreground: var(--brand-text);
+  --card: var(--brand-surface);
+  --card-foreground: var(--brand-text);
+  --primary: var(--brand-text);
+  --primary-foreground: var(--brand-bg);
+  --secondary: #1a1c24;
+  --secondary-foreground: var(--brand-text);
+  --muted: var(--brand-surface);
+  --muted-foreground: var(--brand-muted);
+  --accent: #1c1e27;
+  --accent-foreground: var(--brand-text);
+  --highlight: var(--brand-accent);
+  --highlight-foreground: var(--brand-bg);
+  --highlight-ink: var(--brand-accent-light);
+  --destructive: #f08a7e;
+  --border: var(--brand-border);
+  --input: #30333f;
+  --ring: var(--brand-accent);
+  --font-heading: var(--font-playfair);
+  --font-body: var(--font-manrope);
+  /* Cinematic and slow. */
+  --reveal-animation: reveal-cinematic 1.4s var(--ease-out) both;
+}
+
+[data-theme="trips"] {
+  color-scheme: light;
+  --background: var(--trips-bg);
+  --foreground: var(--trips-primary);
+  --card: var(--trips-surface);
+  --card-foreground: var(--trips-primary);
+  /* Forest buttons: white on burnt orange is only 3.5:1, so orange is the accent. */
+  --primary: var(--trips-primary);
+  --primary-foreground: var(--trips-surface);
+  --secondary: #e9e4d6;
+  --secondary-foreground: var(--trips-primary);
+  --muted: #ebe6d9;
+  --muted-foreground: var(--trips-secondary);
+  --accent: #e3dccb;
+  --accent-foreground: var(--trips-primary);
+  --highlight: var(--trips-accent);
+  --highlight-foreground: var(--trips-primary);
+  --highlight-ink: var(--trips-accent-ink);
+  --destructive: #b3261e;
+  --border: var(--trips-border);
+  --input: #cbc5b5;
+  --ring: var(--trips-accent);
+  --font-heading: var(--font-dm-serif);
+  --font-body: var(--font-dm-sans);
+  /* Energetic and directional. */
+  --reveal-animation: reveal-slide 0.7s var(--ease-out) both;
+}
+
+[data-theme="companion"] {
+  color-scheme: dark;
+  --background: var(--companion-bg);
+  --foreground: var(--companion-text);
+  --card: var(--companion-card);
+  --card-foreground: var(--companion-text);
+  --primary: var(--companion-accent);
+  --primary-foreground: var(--companion-bg);
+  --secondary: var(--companion-surface);
+  --secondary-foreground: var(--companion-text);
+  --muted: var(--companion-surface);
+  --muted-foreground: var(--companion-muted);
+  --accent: #33283b;
+  --accent-foreground: var(--companion-text);
+  --highlight: var(--companion-highlight);
+  --highlight-foreground: var(--companion-bg);
+  --highlight-ink: var(--companion-highlight);
+  --destructive: #f19a9a;
+  --border: var(--companion-border);
+  --input: #4a3c53;
+  --ring: var(--companion-accent);
+  --font-heading: var(--font-cormorant);
+  --font-body: var(--font-jakarta);
+  /* Soft and fluid. */
+  --reveal-animation: reveal-soft 1s var(--ease-out) both;
+}
+
+/* Paint the page behind a world too (overscroll, short pages). */
+body:has([data-theme="brand"]) {
+  background: var(--brand-bg);
+}
+body:has([data-theme="trips"]) {
+  background: var(--trips-bg);
+}
+body:has([data-theme="companion"]) {
+  background: var(--companion-bg);
 }
 
 @theme inline {
@@ -76,21 +211,34 @@
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-highlight: var(--highlight);
+  --color-highlight-foreground: var(--highlight-foreground);
+  --color-highlight-ink: var(--highlight-ink);
   --color-destructive: var(--destructive);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
 
+  /* Palette colours, for the few places that show another world (the landing page previews). */
+  --color-trips-bg: var(--trips-bg);
+  --color-trips-accent: var(--trips-accent);
+  --color-trips-accent-2: var(--trips-accent-2);
+  --color-companion-accent: var(--companion-accent);
+  --color-companion-accent-2: var(--companion-accent-2);
+  --color-companion-highlight: var(--companion-highlight);
+
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 0.25rem);
   --radius-xl: calc(var(--radius) + 0.25rem);
 
-  --font-sans: var(--font-geist-sans);
+  --font-sans: var(--font-body);
+  --font-display: var(--font-heading);
+  --font-logo: var(--font-playfair);
   --font-mono: var(--font-geist-mono);
 
   /* Slide transitions for step-by-step flows (Companion sign-up). */
-  --animate-slide-in-right: slide-in-right 0.3s ease-out;
-  --animate-slide-in-left: slide-in-left 0.3s ease-out;
+  --animate-slide-in-right: slide-in-right 0.4s var(--ease-out);
+  --animate-slide-in-left: slide-in-left 0.4s var(--ease-out);
 
   @keyframes slide-in-right {
     from {
@@ -103,6 +251,92 @@
       opacity: 0;
       transform: translateX(-2.5rem);
     }
+  }
+}
+
+/* ── Motion ─────────────────────────────────────────────────────────────── */
+
+@keyframes reveal-cinematic {
+  from {
+    opacity: 0;
+    filter: blur(12px);
+    transform: translateY(1.5rem);
+  }
+}
+@keyframes reveal-slide {
+  from {
+    opacity: 0;
+    transform: translateX(-2rem);
+  }
+}
+@keyframes reveal-soft {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+}
+@keyframes drift {
+  from {
+    transform: scale(1.08) translate3d(0, 0, 0);
+  }
+  to {
+    transform: scale(1.14) translate3d(-1.5%, -1%, 0);
+  }
+}
+
+@layer components {
+  /* One class, each world's own motion: cinematic, directional or soft. */
+  .reveal {
+    animation: var(--reveal-animation);
+    animation-delay: var(--delay, 0ms);
+  }
+  /* Scroll reveals (see <Reveal>): hidden only once JS knows it's below the fold. */
+  [data-reveal="pending"] {
+    opacity: 0;
+  }
+  [data-reveal="shown"] {
+    animation: var(--reveal-animation);
+    animation-delay: var(--delay, 0ms);
+  }
+  /* Slow push-in on hero photography. */
+  .drift {
+    animation: drift 24s ease-in-out infinite alternate;
+  }
+
+  /* Film grain over dark imagery: an SVG noise tile, very faint. */
+  .grain {
+    position: relative;
+    isolation: isolate;
+  }
+  .grain::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    opacity: 0.07;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  /* Small uppercase label: dates, counts, sections. */
+  .eyebrow {
+    font-size: 0.6875rem;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal,
+  [data-reveal],
+  .drift {
+    animation: none !important;
+    opacity: 1 !important;
+  }
+  html {
+    scroll-behavior: auto;
   }
 }
 
@@ -119,7 +353,22 @@
   body {
     background: var(--background);
     color: var(--foreground);
-    font-family: var(--font-sans), system-ui, sans-serif;
+    font-family: var(--font-body), system-ui, sans-serif;
     -webkit-tap-highlight-color: transparent;
+  }
+
+  /* A world paints itself and sets its body font. */
+  [data-theme] {
+    background: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-body), system-ui, sans-serif;
+  }
+
+  /* Page and section headings use the world's display face. Single-weight
+     display faces (DM Serif) shouldn't be faked bold. */
+  h1,
+  h2 {
+    font-family: var(--font-heading), Georgia, serif;
+    font-synthesis-weight: none;
   }
 }

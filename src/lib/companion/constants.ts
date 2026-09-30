@@ -1,8 +1,10 @@
 // Shared, client-safe constants for Companion onboarding.
 
-/** Slides in the join flow, in order. The first three create or sign in the account. */
+/**
+ * Slides in the join flow, in order. People arrive signed in (see /login); the
+ * first two add a verified phone number if the account doesn't have one yet.
+ */
 export const JOIN_STEPS = [
-  "name",
   "phone",
   "otp",
   "birthday",
@@ -121,33 +123,12 @@ export const SELFIE_POSES = [
   "Wave with your hand open",
 ] as const;
 
-export const COUNTRY_CODES = [
-  { code: "+91", label: "India (+91)" },
-  { code: "+1", label: "US / Canada (+1)" },
-  { code: "+44", label: "UK (+44)" },
-  { code: "+971", label: "UAE (+971)" },
-  { code: "+61", label: "Australia (+61)" },
-  { code: "+65", label: "Singapore (+65)" },
-] as const;
-
 export function optionLabel(options: readonly Option[], id: string | undefined) {
   return options.find((o) => o.id === id)?.label ?? id ?? "";
 }
 
 export function isOption(options: readonly Option[], value: unknown): value is string {
   return typeof value === "string" && options.some((o) => o.id === value);
-}
-
-/** "+91" + "98765 43210" → "+919876543210", or null if it doesn't look like a mobile number. */
-export function normalizePhone(countryCode: string, number: string) {
-  const digits = number.replace(/[\s()-]/g, "").replace(/^0+/, "");
-  const full = digits.startsWith("+") ? digits : `${countryCode}${digits}`;
-  return /^\+[1-9]\d{7,14}$/.test(full) ? full : null;
-}
-
-/** "+919876543210" → "•••••••••3210", for showing which number a code was sent to. */
-export function maskPhone(phone: string) {
-  return `${"•".repeat(Math.max(phone.length - 5, 0))}${phone.slice(-4)}`;
 }
 
 export function ageFrom(birthDate: Date | string, now = new Date()) {

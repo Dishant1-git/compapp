@@ -77,23 +77,41 @@ cancellations and upheld reports (`src/lib/trips/trust.ts`).
 
 - Online payments: bookings start `unpaid` and agencies mark them paid by hand. Add Razorpay or Cashfree in `bookTrip`.
 - Real-time chat: the group chat polls every 4 seconds. Swap in WebSockets or Pusher when needed.
-- Email and ID verification (the `verification` flags exist on the user model). Phone OTP is built for Companion.
+- Email and ID verification (the `verification` flags exist on the user model). Phone OTP is built.
 - Email or push delivery of notifications (in-app only for now)
+
+## Signing in
+
+One account and one sign-in for everything. `/trips/**`, `/companion/**`,
+`/notifications`, `/agency/**` and `/admin/**` need an account: a signed-out visitor
+clicking **Explore Stranger Trips** or **Join Companion** (or opening any of those URLs)
+is sent to `/login?next=<that URL>`, and comes straight back after logging in or signing
+up. Switching between products never asks again.
+
+- **`/login` and `/register`** each offer **mobile number** (6-digit code) or **email +
+  password**. Links between them keep `?next=`. Already signed in? Both pages send you
+  straight on.
+- **New accounts** go through the product's onboarding first: Stranger Trips →
+  `/trips/profile?welcome=1`, Companion → `/companion/join`. Then back to `next`.
+- **No `next`:** you land on your role's home (`/trips`, `/agency` or `/admin`).
+- **Safety:** `safeNext()` in `src/lib/auth/dal.ts` only allows same-site paths (no
+  `//evil.com`, backslashes, whitespace, or the sign-in pages themselves).
+- **Where it's enforced:** `src/proxy.ts` does a fast cookie check and redirect; the real
+  checks are `requireUser()` / `requireRole()` in every layout, page and action.
 
 ## Companion
 
-Click **Join Companion** on the home page (or go to `/companion/join`). Sign-up is one
-question per slide, saved as you go, so leaving and coming back resumes where you were:
+Click **Join Companion** on the home page. After signing in, onboarding is one question
+per slide, saved as you go, so leaving and coming back resumes where you were:
 
-name → mobile number → OTP → birthday → look (height, body type) → location → gender →
+mobile number → OTP (only if the account has no verified number yet) → birthday → look (height, body type) → location → gender →
 sexual orientation → interests → drinking & smoking → photos → live selfie → profile preview → Done.
 
-- **Accounts:** the verified phone number *is* the account; no email or password needed.
-  Entering the same number again signs you back in. If you're already signed in with
-  email, the number is added to that account instead.
+- **Accounts:** Companion needs a verified phone number. Sign up with your number and it's
+  already done; sign in with email and it's added to that same account.
 - **OTP:** 6 digits, valid 5 minutes, 5 tries per code, 30 s between resends, 5 texts per
-  number per hour (`src/lib/companion/otp.ts`). Texts go out through Fast2SMS, MSG91 or
-  Twilio, whichever has keys in `.env.local` (`src/lib/companion/sms.ts`). In development
+  number per hour (`src/lib/auth/otp.ts`). Texts go out through Fast2SMS, MSG91 or
+  Twilio, whichever has keys in `.env.local` (`src/lib/auth/sms.ts`). In development
   without one, the code is printed in the terminal and shown on screen.
 - **Photos and selfie** are resized in the browser and stored in MongoDB
   (`CompanionImage`), served from `/api/companion/images/[id]`. Selfies are only visible to
@@ -101,15 +119,21 @@ sexual orientation → interests → drinking & smoking → photos → live self
 - **Selfie verification:** the selfie is taken live with the camera and a random pose, then
   compared with the profile photos on the server in a few seconds, free, with no API keys
   (face-api on TensorFlow.js/WebAssembly, `src/lib/companion/face-match.ts`). Face distance
-  ≤ 0.45 is verified instantly, > 0.60 rejected with a reason; anything in between (or an
-  error) waits for an admin at **`/admin/verifications`**. The profile preview and
-  `/companion` only unlock once verified. The pose isn't checked automatically; admins see
-  it on uncertain cases. Thresholds live in `src/lib/companion/verification.ts`.
+  ≤ 0.50 is verified instantly; anything above is rejected with a reason (between 0.50 and
+  0.60, tips for a clearer retake). No admin is needed; if the check itself errors, they're
+  asked to try again. **`/admin/verifications`** remains as a log. The profile preview and
+  `/companion` only unlock once verified. The pose isn't checked automatically.
+  Thresholds live in `src/lib/companion/verification.ts`.
+- **Photo moderation:** every uploaded profile photo is checked on the server before it's
+  saved, free and self-hosted (`src/lib/companion/moderation.ts`): nudity (NSFWJS), possible
+  minors (face-api age estimate), no clear face / no clear main person / too many people,
+  face too small, and blurry, dark, washed-out, tiny or stretched images. Rejections show the
+  reason. Weapons, drugs, gore, hate symbols and AI-generated images are **not** detected.
 - Camera access needs `https` or `localhost`. To test on a phone, use a tunnel with https.
 
 | Route | What it does |
 |---|---|
-| `/companion/join` | The sign-up slides. `?edit=1` edits a finished profile. |
+| `/companion/join` | The onboarding slides. `?edit=1` edits a finished profile. |
 | `/companion` | Your finished profile. |
 
 ## Folder structure
@@ -143,16 +167,37 @@ src/
 │   └── trips/                # All Stranger Trips components
 └── lib/
     ├── db/                   # Shared DB connection + Mongoose models
-    ├── auth/                 # Session, DAL (requireRole, getMyAgency), auth actions
+    ├── auth/                 # Session, DAL (requireUser, safeNext), sign-in actions, phone OTP + SMS
     ├── admin/  agency/       # queries.ts (reads) + actions.ts (writes) per area
     ├── trips/                # queries, actions, chat, cancel, matching, trust, …
-    ├── companion/            # Sign-up actions, OTP, queries, verification hook
+    ├── companion/            # Onboarding actions, queries, moderation, selfie check
     ├── notifications.ts      # notify() + reads
     └── form-utils.ts         # Shared Server Action parsing
 ```
 
-## Theming
+## Theming: three worlds, one brand
 
-All components use semantic Tailwind colors (`bg-primary`, `text-muted-foreground`,
-`border-border`, …) mapped to CSS variables in `src/app/globals.css`. To apply a
-brand palette, edit the variables there (light and dark).
+| World | Where | Palette | Type | Motion |
+|---|---|---|---|---|
+| **Midnight** (`brand`) | Landing, `/login`, `/register` | near-black, ivory, gold | Playfair Display + Manrope | cinematic: fade + blur, slow |
+| **Terra** (`trips`) | `/trips/**` | sand, forest, burnt orange | DM Serif Display + DM Sans | directional: slide, image zoom |
+| **Velvet** (`companion`) | `/companion/**` | plum, rose, champagne | Cormorant Garamond + Plus Jakarta Sans | soft: fade + scale |
+
+Admin, agency and notifications keep the neutral "console" look (with dark mode).
+
+- **Tokens:** `src/app/globals.css` holds each world's raw palette (`--brand-*`,
+  `--trips-*`, `--companion-*`) and maps it onto the semantic tokens every component uses
+  (`bg-primary`, `text-muted-foreground`, `bg-highlight` for the signature accent,
+  `text-highlight-ink` for small accent text). Change a colour there, not in components.
+- **Switching world:** a layout wraps its pages in `<Theme world="trips">`
+  (`src/components/layout/theme.tsx`), which sets `data-theme` and loads that world's
+  fonts (`src/lib/fonts.ts`) only on those pages.
+- **Shared DNA:** one logo (`ui/logo.tsx`), pill buttons, one radius, `h1`/`h2` in the
+  world's display face, `.eyebrow` labels.
+- **Motion:** add `reveal` (on load) or wrap in `<Reveal>` (on scroll); the world decides
+  how it moves. Everything is disabled under "reduce motion".
+- **Photos:** `public/images/` (Unsplash, see `CREDITS.md`). Trips have no photos yet,
+  so cards use a designed cover (`trips/trip-cover.tsx`); add a `coverImage` field to
+  `Trip` to show real ones.
+- **Contrast:** checked to WCAG AA. White on burnt orange fails (3.5:1), so Trips buttons
+  are forest green and orange is the accent.

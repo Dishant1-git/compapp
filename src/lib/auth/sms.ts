@@ -34,7 +34,7 @@ export async function sendOtpSms(to: string, code: string): Promise<SmsResult> {
 
   if (!provider) {
     if (process.env.NODE_ENV === "production") {
-      console.error("OTP not sent: no SMS provider configured. See src/lib/companion/sms.ts.");
+      console.error("OTP not sent: no SMS provider configured. See src/lib/auth/sms.ts.");
       return { ok: false, error: "We can't send text messages right now. Please try again later." };
     }
     console.info(`[dev] OTP for ${to}: ${code}`);

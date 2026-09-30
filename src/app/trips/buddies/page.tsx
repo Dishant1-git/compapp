@@ -5,7 +5,7 @@ import { PlanCard } from "@/components/trips/plan-card";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { Input } from "@/components/ui/input";
-import { getCurrentUser } from "@/lib/auth/dal";
+import { requireUser } from "@/lib/auth/dal";
 import { listPlans } from "@/lib/trips/queries";
 
 export const metadata: Metadata = {
@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 export default async function BuddiesPage({ searchParams }: PageProps<"/trips/buddies">) {
   const { q } = await searchParams;
   const query = typeof q === "string" ? q.trim() : "";
-  const user = await getCurrentUser();
+  const user = await requireUser(typeof q === "string" && q ? `/trips/buddies?q=${encodeURIComponent(q)}` : "/trips/buddies");
   const plans = await listPlans({ q: query || undefined }, user);
 
   return (

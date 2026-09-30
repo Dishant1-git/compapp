@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ButtonLink } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
+import { logout } from "@/lib/auth/actions";
 import { siteConfig } from "@/lib/site-config";
 
-export function MobileNav() {
+export function MobileNav({ signedIn }: { signedIn: boolean }) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -29,7 +30,7 @@ export function MobileNav() {
         aria-expanded={open}
         aria-controls="mobile-menu"
         aria-label={open ? "Close menu" : "Open menu"}
-        className="grid size-11 place-items-center rounded-lg hover:bg-muted"
+        className="grid size-11 place-items-center rounded-full hover:bg-foreground/5"
       >
         <svg
           viewBox="0 0 24 24"
@@ -51,7 +52,7 @@ export function MobileNav() {
       {open && (
         <div
           id="mobile-menu"
-          className="fixed inset-x-0 top-16 bottom-0 z-40 overflow-y-auto border-t bg-background px-4 pt-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
+          className="fixed inset-x-0 top-18 bottom-0 z-40 overflow-y-auto border-t bg-background px-4 pt-6 pb-[max(1.5rem,env(safe-area-inset-bottom))]"
         >
           <nav className="flex flex-col">
             {siteConfig.nav.map((item) => (
@@ -59,19 +60,29 @@ export function MobileNav() {
                 key={item.href}
                 href={item.href}
                 onClick={close}
-                className="rounded-lg px-3 py-3 text-base font-medium hover:bg-muted"
+                className="border-b px-1 py-4 font-display text-3xl tracking-tight"
               >
                 {item.label}
               </Link>
             ))}
           </nav>
           <div className="mt-6 grid gap-3">
-            <ButtonLink href="/login" variant="outline" size="lg" onClick={close}>
-              Log in
-            </ButtonLink>
-            <ButtonLink href="/register" size="lg" onClick={close}>
-              Create account
-            </ButtonLink>
+            {signedIn ? (
+              <form action={logout} className="grid">
+                <Button type="submit" variant="outline" size="lg">
+                  Log out
+                </Button>
+              </form>
+            ) : (
+              <>
+                <ButtonLink href="/login" variant="outline" size="lg" onClick={close}>
+                  Log in
+                </ButtonLink>
+                <ButtonLink href="/register" size="lg" onClick={close}>
+                  Sign up
+                </ButtonLink>
+              </>
+            )}
           </div>
         </div>
       )}
