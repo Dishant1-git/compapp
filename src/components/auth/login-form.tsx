@@ -17,13 +17,13 @@ export function LoginForm({ next }: { next?: string }) {
       {next && <input type="hidden" name="next" value={next} />}
 
       <div>
-        <Label htmlFor="email">Email</Label>
+        <Label htmlFor="email">Email or username</Label>
         <Input
           id="email"
           name="email"
-          type="email"
-          autoComplete="email"
-          inputMode="email"
+          type="text"
+          autoComplete="username"
+          autoCapitalize="none"
           placeholder="you@example.com"
           defaultValue={state.values?.email}
           required

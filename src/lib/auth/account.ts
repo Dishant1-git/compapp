@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/db/mongoose";
 import { Agency, type AgencyStatus } from "@/lib/db/models/agency";
 import { User } from "@/lib/db/models/user";
 import { isFrontend, remoteCall } from "@/lib/remote";
+import { resetLinkValid } from "./password-reset";
 
 // Account lookups behind the helpers in dal.ts. They're separate so the
 // frontend deployment can ask the backend for them (see src/lib/remote.ts).
@@ -39,6 +40,12 @@ export async function loadVerified(userId: string): Promise<boolean> {
   await connectDB();
   const user = await User.findById(userId).select("email verification").lean();
   return !!user && (!!user.verification?.phone || (!!user.email && !!user.verification?.email));
+}
+
+/** Is this "forgot password" link still usable? For the page that asks for the new password. */
+export async function checkResetLink(token: string): Promise<boolean> {
+  if (isFrontend()) return remoteCall("auth/account.checkResetLink", [token]);
+  return resetLinkValid(token);
 }
 
 export type CurrentAgency = {

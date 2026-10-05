@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useActionState } from "react";
 import { Button } from "@/components/ui/button";
-import { FieldError, Input, Label } from "@/components/ui/input";
+import { FieldError, Input, Label, Select } from "@/components/ui/input";
 import { register, type FormState } from "@/lib/auth/actions";
+import { COUNTRY_CODES } from "@/lib/phone";
 import { siteConfig, type PlatformId } from "@/lib/site-config";
 import { FormMessage } from "./form-message";
 import { PasswordInput } from "./password-input";
@@ -50,6 +51,63 @@ export function RegisterForm({ defaultPlatform, next }: { defaultPlatform?: Plat
           aria-describedby="email-error"
         />
         <FieldError id="email-error" messages={state.errors?.email} />
+      </div>
+
+      <div>
+        <Label htmlFor="username">Username</Label>
+        <Input
+          id="username"
+          name="username"
+          autoComplete="username"
+          autoCapitalize="none"
+          spellCheck={false}
+          maxLength={20}
+          placeholder="alex_doe"
+          defaultValue={state.values?.username as string | undefined}
+          required
+          aria-invalid={!!state.errors?.username}
+          aria-describedby="username-error username-hint"
+        />
+        <p id="username-hint" className="mt-1.5 text-xs text-muted-foreground">
+          3 to 20 characters: lowercase letters, numbers and underscores. You can log in with it.
+        </p>
+        <FieldError id="username-error" messages={state.errors?.username} />
+      </div>
+
+      <div>
+        <Label htmlFor="phone">Mobile number</Label>
+        {/* Widths live on wrappers: Select and Input are always w-full. */}
+        <div className="flex gap-2">
+          <div className="w-28 shrink-0">
+            <Select
+              name="countryCode"
+              aria-label="Country code"
+              defaultValue={(state.values?.countryCode as string | undefined) ?? COUNTRY_CODES[0].code}
+              className="px-3"
+            >
+              {COUNTRY_CODES.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.code}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <div className="min-w-0 flex-1">
+            <Input
+              id="phone"
+              name="phone"
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel-national"
+              placeholder="98765 43210"
+              defaultValue={state.values?.phone as string | undefined}
+              required
+              aria-invalid={!!state.errors?.phone}
+              aria-describedby="phone-error"
+            />
+          </div>
+        </div>
+        <FieldError id="phone-error" messages={state.errors?.phone} />
       </div>
 
       <div>

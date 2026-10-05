@@ -14,7 +14,10 @@ export type PasswordCheck =
   | { ok: true; user: { id: string; name: string; email: string; role: string } }
   | { ok: false; error: string };
 
-/** Check an email and password. Shared by the login form and the token login API. */
+/**
+ * Check a password. `email` is what was typed in the login box: an email
+ * address, or a username. Shared by the login form and the token login API.
+ */
 export async function checkPassword(email: string, password: string): Promise<PasswordCheck> {
   await connectDB();
   const now = new Date();
@@ -24,7 +27,9 @@ export async function checkPassword(email: string, password: string): Promise<Pa
     return { ok: false, error: `Too many wrong passwords. Try again in ${minutes} minute${minutes === 1 ? "" : "s"}.` };
   }
 
-  const user = await User.findOne({ email }).select("+passwordHash name email role status");
+  const user = await User.findOne(email.includes("@") ? { email } : { username: email }).select(
+    "+passwordHash name email role status",
+  );
   if (!user?.passwordHash || !(await bcrypt.compare(password, user.passwordHash))) {
     // Counted for unknown emails too, so the reply never reveals which emails have accounts.
     if (attempts) await LoginAttempt.updateOne({ _id: attempts._id }, { $inc: { failures: 1 } });
@@ -35,7 +40,7 @@ export async function checkPassword(email: string, password: string): Promise<Pa
         { upsert: true },
       );
     }
-    return { ok: false, error: "Incorrect email or password." };
+    return { ok: false, error: "Incorrect email, username or password." };
   }
   if (user.status === "suspended") {
     return { ok: false, error: "This account has been suspended. Contact support for help." };

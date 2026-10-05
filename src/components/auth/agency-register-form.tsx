@@ -58,6 +58,15 @@ export function AgencyRegisterForm() {
         <legend className="mb-3 text-sm font-semibold">Your login</legend>
         {field({ name: "name", label: "Your full name", autoComplete: "name", required: true })}
         {field({ name: "email", label: "Email", type: "email", autoComplete: "email", required: true })}
+        {field({
+          name: "username",
+          label: "Username",
+          autoComplete: "username",
+          autoCapitalize: "none",
+          maxLength: 20,
+          required: true,
+          hint: "3 to 20 characters: lowercase letters, numbers and underscores. You can log in with it.",
+        })}
         <div>
           <Label htmlFor="password">Password</Label>
           <PasswordInput id="password" name="password" autoComplete="new-password" minLength={8} required />

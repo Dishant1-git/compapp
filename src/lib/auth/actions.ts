@@ -14,8 +14,10 @@ import { afterSignUp, getCurrentUser, homeFor, productOf, safeNext, type Role } 
 import { emailProblem } from "./email-policy";
 import { confirmEmailCode, sendEmailCode, sendVerificationEmail } from "./email-verification";
 import { sendOtp } from "./otp";
+import { resetPasswordWithLink, sendPasswordReset } from "./password-reset";
 import { phoneOwner, signInWithPhone, SUSPENDED } from "./phone";
 import { createSession, deleteSession } from "./session";
+import { canonicalPhone, phoneTaken, usernameProblem, USERNAME_RE } from "./unique";
 import { isFrontend, remoteAction } from "@/lib/remote";
 
 export type FormState = {
@@ -23,17 +25,22 @@ export type FormState = {
   message?: string;
   /** Echoed back so fields keep their values after React resets the form. Never includes passwords. */
   values?: { name?: string; email?: string; platforms?: PlatformId[]; [key: string]: unknown };
+  /** The form did its job and should show a confirmation instead of itself. */
+  done?: boolean;
+  /** Development only, with no email provider set: the link that would have been emailed. */
+  devLink?: string;
 };
 
 const PLATFORMS: PlatformId[] = ["trips", "companion"];
 
 export async function login(_prev: FormState, formData: FormData): Promise<FormState> {
   if (isFrontend()) return remoteAction("auth/actions.login", [_prev, formData]);
+  // The field accepts an email address or a username.
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
 
   const errors: Record<string, string[]> = {};
-  if (!EMAIL_RE.test(email)) errors.email = ["Enter a valid email address."];
+  if (!EMAIL_RE.test(email) && !USERNAME_RE.test(email)) errors.email = ["Enter your email address or username."];
   if (!password) errors.password = ["Enter your password."];
   const values = { email };
   if (Object.keys(errors).length) return { errors, values };
@@ -46,11 +53,28 @@ export async function login(_prev: FormState, formData: FormData): Promise<FormS
   redirect(safeNext(formData.get("next"), homeFor(user.role as Role)));
 }
 
+/** Sign-up checks shared by travellers and agencies: field errors, or null if all three are free to use. */
+async function alreadyUsed(input: { email: string; username: string; phone: string }) {
+  const errors: Record<string, string[]> = {};
+  const emailIssue = await emailProblem(input.email);
+  await connectDB();
+  if (emailIssue) errors.email = [emailIssue];
+  else if (await User.exists({ email: input.email })) errors.email = ["An account with this email already exists."];
+  const usernameIssue = await usernameProblem(input.username);
+  if (usernameIssue) errors.username = [usernameIssue];
+  if (await phoneTaken(input.phone)) errors.phone = ["An account with this phone number already exists."];
+  return Object.keys(errors).length ? errors : null;
+}
+
 export async function register(_prev: FormState, formData: FormData): Promise<FormState> {
   if (isFrontend()) return remoteAction("auth/actions.register", [_prev, formData]);
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
+  const username = String(formData.get("username") ?? "").trim().toLowerCase();
+  const countryCode = String(formData.get("countryCode") ?? "+91");
+  const phoneInput = String(formData.get("phone") ?? "").trim();
+  const phone = canonicalPhone(phoneInput, countryCode);
   const platforms = formData
     .getAll("platforms")
     .map(String)
@@ -60,22 +84,21 @@ export async function register(_prev: FormState, formData: FormData): Promise<Fo
   if (name.length < 2) errors.name = ["Enter your full name."];
   if (!EMAIL_RE.test(email)) errors.email = ["Enter a valid email address."];
   if (password.length < 8) errors.password = ["Password must be at least 8 characters."];
+  if (!phone) errors.phone = ["Enter a valid mobile number."];
   if (!platforms.length) errors.platforms = ["Choose at least one platform."];
   if (formData.get("terms") !== "on") errors.terms = ["You must accept the terms."];
-  const values = { name, email, platforms };
+  const values = { name, email, username, countryCode, phone: phoneInput, platforms };
   if (Object.keys(errors).length) return { errors, values };
 
-  const problem = await emailProblem(email);
-  if (problem) return { errors: { email: [problem] }, values };
-
-  await connectDB();
-  if (await User.exists({ email })) {
-    return { errors: { email: ["An account with this email already exists."] }, values };
-  }
+  // One account per email, username and phone number.
+  const taken = await alreadyUsed({ email, username, phone: phone! });
+  if (taken) return { errors: taken, values };
 
   const user = await User.create({
     name,
     email,
+    username,
+    phone: phone!,
     platforms,
     passwordHash: await bcrypt.hash(password, 10),
   });
@@ -151,9 +174,12 @@ export async function registerAgency(_prev: FormState, formData: FormData): Prom
   const name = field("name");
   const email = field("email").toLowerCase();
   const password = String(formData.get("password") ?? "");
+  const username = field("username").toLowerCase();
   const agencyName = field("agencyName");
   const city = field("city");
-  const phone = field("phone");
+  const phoneInput = field("phone");
+  // Stored in one format so the same number can't be registered twice with different spacing.
+  const phone = canonicalPhone(phoneInput) ?? phoneInput;
   const registrationNumber = field("registrationNumber");
   const website = field("website");
   const description = field("description");
@@ -164,27 +190,23 @@ export async function registerAgency(_prev: FormState, formData: FormData): Prom
   if (password.length < 8) errors.password = ["Password must be at least 8 characters."];
   if (agencyName.length < 2) errors.agencyName = ["Enter your agency's name."];
   if (city.length < 2) errors.city = ["Enter the city you operate from."];
-  if (!PHONE_RE.test(phone)) errors.phone = ["Enter a valid phone number."];
+  if (!PHONE_RE.test(phoneInput)) errors.phone = ["Enter a valid phone number."];
   if (registrationNumber.length < 4) {
     errors.registrationNumber = ["Enter your tourism registration number or GSTIN."];
   }
   if (website && !/^https?:\/\/\S+\.\S+/.test(website)) errors.website = ["Enter a full URL (https://…)."];
   if (description.length > 1000) errors.description = ["Keep it under 1000 characters."];
   if (formData.get("terms") !== "on") errors.terms = ["You must accept the terms."];
-  const values = { name, email, agencyName, city, phone, registrationNumber, website, description };
+  const values = { name, email, username, agencyName, city, phone: phoneInput, registrationNumber, website, description };
   if (Object.keys(errors).length) return { errors, values };
 
-  const problem = await emailProblem(email);
-  if (problem) return { errors: { email: [problem] }, values };
-
-  await connectDB();
-  if (await User.exists({ email })) {
-    return { errors: { email: ["An account with this email already exists."] }, values };
-  }
+  const taken = await alreadyUsed({ email, username, phone });
+  if (taken) return { errors: taken, values };
 
   const user = await User.create({
     name,
     email,
+    username,
     phone,
     city,
     role: "agency",
@@ -253,6 +275,36 @@ export async function verifyMyEmailCode(code: string): Promise<{ ok: true } | { 
   const confirmed = await confirmEmailCode(viewer.id, digits);
   if (confirmed.ok) revalidatePath("/", "layout");
   return confirmed;
+}
+
+// ─── Forgot password ─────────────────────────────────────────────────────────
+
+/** Email a link to choose a new password. The reply is the same whether or not the address has an account. */
+export async function requestPasswordReset(_prev: FormState, formData: FormData): Promise<FormState> {
+  if (isFrontend()) return remoteAction("auth/actions.requestPasswordReset", [_prev, formData]);
+  const email = String(formData.get("email") ?? "").trim().toLowerCase();
+  if (!EMAIL_RE.test(email)) return { errors: { email: ["Enter a valid email address."] }, values: { email } };
+
+  const { devLink } = await sendPasswordReset(email);
+  return { done: true, devLink, values: { email } };
+}
+
+/** Set the new password from the emailed link, then send them to log in with it. */
+export async function resetPassword(_prev: FormState, formData: FormData): Promise<FormState> {
+  if (isFrontend()) return remoteAction("auth/actions.resetPassword", [_prev, formData]);
+  const token = String(formData.get("token") ?? "");
+  const password = String(formData.get("password") ?? "");
+  const confirm = String(formData.get("confirm") ?? "");
+
+  const errors: Record<string, string[]> = {};
+  if (password.length < 8) errors.password = ["Password must be at least 8 characters."];
+  else if (password !== confirm) errors.confirm = ["The two passwords don't match."];
+  if (Object.keys(errors).length) return { errors };
+
+  if (token.length > 2000 || !(await resetPasswordWithLink(token, password))) {
+    return { message: "This link has expired or was already used. Ask for a new one." };
+  }
+  redirect("/login?reset=1");
 }
 
 export async function logout() {

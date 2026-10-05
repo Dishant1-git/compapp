@@ -7,6 +7,8 @@ const userSchema = new Schema(
   {
     name: { type: String, required: true, trim: true },
     email: { type: String, lowercase: true, trim: true },
+    // Chosen at sign-up; can be used instead of the email to log in. Phone-only accounts have none.
+    username: { type: String, lowercase: true, trim: true },
     passwordHash: { type: String, select: false },
     platforms: { type: [String], enum: ["trips", "companion"], default: [] },
     // user = traveller, agency = runs trips (see Agency model), admin = full access.
@@ -34,6 +36,8 @@ const userSchema = new Schema(
     },
     // When the last "verify your email" link was sent, to limit resends.
     emailVerificationSentAt: { type: Date },
+    // Likewise for "forgot password" emails.
+    passwordResetSentAt: { type: Date },
   },
   { timestamps: true },
 );
@@ -43,6 +47,13 @@ userSchema.index(
   { email: 1 },
   { unique: true, partialFilterExpression: { email: { $type: "string" } } },
 );
+userSchema.index(
+  { username: 1 },
+  { unique: true, partialFilterExpression: { username: { $type: "string" } } },
+);
+// Phone numbers are kept unique by the sign-up and profile forms (see src/lib/auth/unique.ts),
+// not by the database: a number proven by a text-message code must be able to replace
+// one that someone merely typed in.
 userSchema.index({ phone: 1, "verification.phone": 1 });
 
 export type UserDoc = InferSchemaType<typeof userSchema>;

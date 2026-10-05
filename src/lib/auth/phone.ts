@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/db/mongoose";
 import { User, ensureUserEmailIndex } from "@/lib/db/models/user";
 import type { PlatformId } from "@/lib/site-config";
 import { checkOtp } from "./otp";
+import { releaseUnverifiedPhone } from "./unique";
 
 // Phone number + one-time code, shared by sign-in (lib/auth/actions.ts) and by
 // products that need a verified number on an existing account (Companion).
@@ -38,6 +39,7 @@ export async function signInWithPhone(
   if (!create) return fail("No account uses this number yet. Create one instead.");
 
   await ensureUserEmailIndex();
+  await releaseUnverifiedPhone(phone);
   const user = await User.create({
     name: create.name,
     phone,
@@ -54,6 +56,7 @@ export async function linkPhone(userId: string, phone: string, code: string): Pr
 
   const owner = await phoneOwner(phone);
   if (owner && String(owner._id) !== userId) return fail("This number is linked to another account.");
+  await releaseUnverifiedPhone(phone, userId);
   await User.updateOne({ _id: userId }, { $set: { phone, "verification.phone": true } });
   return { ok: true };
 }

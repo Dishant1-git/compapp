@@ -10,7 +10,7 @@ import type { Profile } from "@/lib/trips/queries";
 import type { ActionState } from "@/lib/trips/types";
 import { TagPicker } from "./tag-picker";
 
-type Initial = Omit<Profile, "trust" | "verification" | "email">;
+type Initial = Omit<Profile, "trust" | "verification" | "email" | "username">;
 
 export function ProfileForm({ profile, next }: { profile: Initial; next?: string }) {
   const [state, action, pending] = useActionState<ActionState, FormData>(updateProfile, {});

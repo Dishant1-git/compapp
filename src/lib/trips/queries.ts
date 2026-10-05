@@ -354,6 +354,7 @@ export async function trustScoresFor(userIds: string[]): Promise<Map<string, Tru
 export type Profile = {
   name: string;
   email: string;
+  username: string;
   phone: string;
   city: string;
   birthYear: number | null;
@@ -375,6 +376,7 @@ export async function getProfile(userId: string): Promise<Profile | null> {
   return {
     name: user.name,
     email: user.email ?? "",
+    username: user.username ?? "",
     phone: user.phone ?? "",
     city: user.city ?? "",
     birthYear: user.birthYear ?? null,

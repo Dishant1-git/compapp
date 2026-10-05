@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { checkPassword, EMAIL_RE } from "@/lib/auth/credentials";
 import { encrypt, SESSION_DAYS } from "@/lib/auth/token";
+import { USERNAME_RE } from "@/lib/auth/unique";
 
 /**
  * Token login for API clients (a mobile app, scripts): POST { email, password }
@@ -13,8 +14,9 @@ export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
   const email = String(body?.email ?? "").trim().toLowerCase();
   const password = String(body?.password ?? "");
-  if (!EMAIL_RE.test(email) || !password) {
-    return NextResponse.json({ error: "Send an email and a password." }, { status: 400 });
+  // `email` may be an email address or a username.
+  if ((!EMAIL_RE.test(email) && !USERNAME_RE.test(email)) || !password) {
+    return NextResponse.json({ error: "Send an email (or username) and a password." }, { status: 400 });
   }
 
   const checked = await checkPassword(email, password);

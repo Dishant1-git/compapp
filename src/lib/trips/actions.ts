@@ -3,6 +3,7 @@
 import { revalidatePath } from "@/lib/revalidate";
 import { redirect } from "next/navigation";
 import { getCurrentUser, requireUser, requireVerified, safeNext } from "@/lib/auth/dal";
+import { phoneTaken } from "@/lib/auth/unique";
 import { connectDB } from "@/lib/db/mongoose";
 import { Booking } from "@/lib/db/models/booking";
 import { BuddyRequest } from "@/lib/db/models/buddy-request";
@@ -181,6 +182,9 @@ export async function updateProfile(_prev: ActionState, formData: FormData): Pro
   if (ecPhone && !PHONE_RE.test(ecPhone)) errors.emergencyPhone = ["Enter a valid phone number."];
   if (!!ecName !== !!ecPhone) errors.emergencyName = ["Add both a name and a phone number."];
   if (ecPhone && ecPhone === phone) errors.emergencyPhone = ["Use someone else's number."];
+  if (phone && !errors.phone && (await phoneTaken(phone, viewer.id))) {
+    errors.phone = ["Another account already uses this phone number."];
+  }
   if (hasErrors(errors)) return { errors, values: echo(formData) };
 
   await connectDB();

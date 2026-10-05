@@ -13,7 +13,8 @@ export const metadata: Metadata = {
 };
 
 export default async function LoginPage({ searchParams }: PageProps<"/login">) {
-  const next = safeNext((await searchParams).next, "") || undefined;
+  const params = await searchParams;
+  const next = safeNext(params.next, "") || undefined;
 
   // Already signed in: go straight to where they were headed.
   const viewer = await getCurrentUser();
@@ -32,8 +33,13 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
             : "Log in to continue to your trips and companions."
         }
       />
+      {params.reset && (
+        <p role="status" className="mb-6 rounded-lg border bg-muted px-4 py-3 text-sm font-medium">
+          Your password has been changed. Log in with the new one.
+        </p>
+      )}
       <AuthMethods
-        initial={product?.id === "companion" ? "phone" : "email"}
+        initial={product?.id === "companion" && !params.reset ? "phone" : "email"}
         phone={<PhoneForm mode="login" next={next} />}
         email={<LoginForm next={next} />}
       />

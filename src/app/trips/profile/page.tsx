@@ -17,7 +17,7 @@ export default async function ProfilePage({ searchParams }: PageProps<"/trips/pr
   const profile = await getProfile(user.id);
   if (!profile) return null;
 
-  const { trust, verification, email, ...initial } = profile;
+  const { trust, verification, email, username, ...initial } = profile;
 
   return (
     <Container className="max-w-5xl">
@@ -26,7 +26,7 @@ export default async function ProfilePage({ searchParams }: PageProps<"/trips/pr
         description={
           welcome
             ? "Tell us how you like to travel so we can match you with the right group."
-            : `Signed in as ${email}`
+            : `Signed in as ${[username && `@${username}`, email].filter(Boolean).join(" · ")}`
         }
       />
 
