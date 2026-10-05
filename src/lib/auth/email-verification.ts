@@ -3,6 +3,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { headers } from "next/headers";
 import { connectDB } from "@/lib/db/mongoose";
 import { User } from "@/lib/db/models/user";
+import { rpcContext } from "@/lib/rpc-context";
 import { siteConfig } from "@/lib/site-config";
 import { sendEmail } from "./email";
 import { isDisposableEmail, TEMP_EMAIL } from "./email-policy";
@@ -23,9 +24,12 @@ function key() {
 }
 
 /** Public address of the site, for links in emails. Set APP_URL in production. */
-async function siteOrigin() {
+export async function siteOrigin() {
   const fixed = process.env.APP_URL?.trim().replace(/\/+$/, "");
   if (fixed) return fixed;
+  // Called on behalf of the frontend deployment: its address is the public one.
+  const frontend = rpcContext.getStore()?.origin;
+  if (frontend) return frontend;
   const h = await headers();
   const host = h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000";
   const proto = h.get("x-forwarded-proto") ?? (host.startsWith("localhost") || host.startsWith("127.") ? "http" : "https");

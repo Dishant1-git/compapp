@@ -34,6 +34,7 @@ import { moderatePhoto } from "./moderation";
 import { getCompanionAccount, getCompanionDraft } from "./queries";
 import { imageUrl, resumeStep, type ActionResult, type CompanionDraft, type SelfieStatus } from "./types";
 import { verifySelfie } from "./verification";
+import { isFrontend, remoteAction } from "@/lib/remote";
 
 const fail = (error: string) => ({ ok: false as const, error });
 const SIGNED_OUT = "Your session ended. Refresh the page and log in again.";
@@ -44,6 +45,7 @@ export async function sendCode(input: {
   countryCode: string;
   number: string;
 }): Promise<{ ok: true; phone: string; devCode?: string } | { ok: false; error: string; retryAfter?: number }> {
+  if (isFrontend()) return remoteAction("companion/actions.sendCode", [input]);
   const viewer = await getCurrentUser();
   if (!viewer) return fail(SIGNED_OUT);
   const phone = normalizePhone(String(input.countryCode), String(input.number));
@@ -63,6 +65,7 @@ export type VerifyResult =
 
 /** Check the code and attach the number to the signed-in account. */
 export async function verifyCode(input: { phone: string; code: string }): Promise<VerifyResult> {
+  if (isFrontend()) return remoteAction("companion/actions.verifyCode", [input]);
   const viewer = await getCurrentUser();
   if (!viewer) return fail(SIGNED_OUT);
   const phone = String(input.phone ?? "");
@@ -85,6 +88,7 @@ export async function verifyCode(input: { phone: string; code: string }): Promis
 export async function sendEmailVerificationCode(): Promise<
   { ok: true; email: string; devCode?: string } | { ok: false; error: string; retryAfter?: number }
 > {
+  if (isFrontend()) return remoteAction("companion/actions.sendEmailVerificationCode", []);
   const viewer = await getCurrentUser();
   if (!viewer) return fail(SIGNED_OUT);
   return sendEmailCode(viewer.id);
@@ -92,6 +96,7 @@ export async function sendEmailVerificationCode(): Promise<
 
 /** Check the emailed code and mark the account's email as verified. */
 export async function verifyEmailCode(input: { code: string }): Promise<VerifyResult> {
+  if (isFrontend()) return remoteAction("companion/actions.verifyEmailCode", [input]);
   const viewer = await getCurrentUser();
   if (!viewer) return fail(SIGNED_OUT);
   const code = String(input?.code ?? "").trim();
@@ -130,6 +135,7 @@ async function saveProfile(
 }
 
 export async function saveBirthday(birthDate: string): Promise<ActionResult> {
+  if (isFrontend()) return remoteAction("companion/actions.saveBirthday", [birthDate]);
   const date = dateInput(String(birthDate));
   if (!date || date > new Date()) return fail("Enter your date of birth.");
   const age = ageFrom(date);
@@ -143,6 +149,7 @@ export async function saveBirthday(birthDate: string): Promise<ActionResult> {
 }
 
 export async function saveLook(input: { heightCm: number; bodyType: string | null }): Promise<ActionResult> {
+  if (isFrontend()) return remoteAction("companion/actions.saveLook", [input]);
   const heightCm = Math.round(Number(input.heightCm));
   if (!(heightCm >= MIN_HEIGHT_CM && heightCm <= MAX_HEIGHT_CM)) return fail("Choose your height.");
   const bodyType = input.bodyType && isOption(BODY_TYPES, input.bodyType) ? input.bodyType : undefined;
@@ -156,6 +163,7 @@ export async function saveLocation(input: {
   lat?: number | null;
   lng?: number | null;
 }): Promise<ActionResult> {
+  if (isFrontend()) return remoteAction("companion/actions.saveLocation", [input]);
   const city = String(input.city ?? "").trim().slice(0, 80);
   if (city.length < 2) return fail("Enter the city you live in.");
 
@@ -176,6 +184,7 @@ export async function saveLocation(input: {
 }
 
 export async function saveGender(gender: string): Promise<ActionResult> {
+  if (isFrontend()) return remoteAction("companion/actions.saveGender", [gender]);
   if (!isOption(COMPANION_GENDERS, gender)) return fail("Choose an option.");
   return saveProfile({ $set: { gender } }, { update: { $set: { gender } } });
 }
@@ -184,6 +193,7 @@ export async function saveSexuality(input: {
   sexuality: string[];
   showSexuality: boolean;
 }): Promise<ActionResult> {
+  if (isFrontend()) return remoteAction("companion/actions.saveSexuality", [input]);
   const sexuality = [...new Set(input.sexuality)].filter((s) => isOption(SEXUALITIES, s));
   if (!sexuality.length) return fail("Choose at least one option.");
   if (sexuality.length > MAX_SEXUALITIES) return fail(`Choose up to ${MAX_SEXUALITIES}.`);
@@ -191,6 +201,7 @@ export async function saveSexuality(input: {
 }
 
 export async function saveInterests(hobbies: string[]): Promise<ActionResult> {
+  if (isFrontend()) return remoteAction("companion/actions.saveInterests", [hobbies]);
   const picked = [...new Set(hobbies)].filter((h) => isOption(HOBBIES, h));
   if (picked.length < MIN_HOBBIES) return fail(`Choose at least ${MIN_HOBBIES}.`);
   if (picked.length > MAX_HOBBIES) return fail(`Choose up to ${MAX_HOBBIES}.`);
@@ -198,6 +209,7 @@ export async function saveInterests(hobbies: string[]): Promise<ActionResult> {
 }
 
 export async function saveLifestyle(input: { drinking: string; smoking: string }): Promise<ActionResult> {
+  if (isFrontend()) return remoteAction("companion/actions.saveLifestyle", [input]);
   if (!isOption(DRINKING, input.drinking)) return fail("Tell us if you drink.");
   if (!isOption(SMOKING, input.smoking)) return fail("Tell us if you smoke.");
   return saveProfile({ $set: { drinking: input.drinking, smoking: input.smoking } });
@@ -227,6 +239,7 @@ async function readImage(file: FormDataEntryValue | null) {
 export async function uploadPhoto(
   formData: FormData,
 ): Promise<{ ok: true; photo: { id: string; url: string } } | { ok: false; error: string }> {
+  if (isFrontend()) return remoteAction("companion/actions.uploadPhoto", [formData]);
   const viewer = await companionUser();
   if (!viewer) return fail(SIGNED_OUT);
 
@@ -262,6 +275,7 @@ export async function uploadPhoto(
 }
 
 export async function removePhoto(photoId: string): Promise<ActionResult> {
+  if (isFrontend()) return remoteAction("companion/actions.removePhoto", [photoId]);
   const viewer = await companionUser();
   if (!viewer) return fail(SIGNED_OUT);
   if (!/^[a-f\d]{24}$/i.test(String(photoId))) return fail("Photo not found.");
@@ -276,6 +290,7 @@ export async function submitSelfie(
 ): Promise<
   { ok: true; selfie: { status: SelfieStatus; url: string; note?: string } } | { ok: false; error: string }
 > {
+  if (isFrontend()) return remoteAction("companion/actions.submitSelfie", [formData]);
   const viewer = await companionUser();
   if (!viewer) return fail(SIGNED_OUT);
 
@@ -333,6 +348,7 @@ export async function submitSelfie(
  * so they're decided automatically here.
  */
 export async function getSelfieStatus(): Promise<{ status: SelfieStatus; note?: string } | null> {
+  if (isFrontend()) return remoteAction("companion/actions.getSelfieStatus", []);
   const viewer = await companionUser();
   if (!viewer) return null;
   const profile = await CompanionProfile.findOne({ user: viewer.id }).select("photos selfie").lean();
@@ -373,6 +389,7 @@ async function photoData(userId: string, ids: unknown[]) {
 // ─── Done ────────────────────────────────────────────────────────────────────
 
 export async function finishProfile(): Promise<ActionResult> {
+  if (isFrontend()) return remoteAction("companion/actions.finishProfile", []);
   const viewer = await companionUser();
   if (!viewer) return fail(SIGNED_OUT);
 

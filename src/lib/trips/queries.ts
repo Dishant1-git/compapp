@@ -22,6 +22,7 @@ import type {
   TripDetail,
   TripSummary,
 } from "./types";
+import { isFrontend, remoteCall } from "@/lib/remote";
 
 type WithId<T> = T & { _id: Types.ObjectId };
 export type LeanTrip = WithId<TripDoc>;
@@ -61,6 +62,7 @@ type Member = { userId: string; personality: string[]; seats?: number };
 
 /** Personalities of everyone holding a confirmed seat, per trip. */
 export async function groupsFor(tripIds: Types.ObjectId[]) {
+  if (isFrontend()) return remoteCall("trips/queries.groupsFor", [tripIds]);
   const bookings = await Booking.find({ trip: { $in: tripIds }, status: "confirmed" })
     .select("trip user seats")
     .populate<{ user: LeanUser | null }>("user", "personality")
@@ -108,6 +110,7 @@ export async function listTrips(
   filters: TripFilters,
   viewer: CurrentUser | null,
 ): Promise<TripSummary[]> {
+  if (isFrontend()) return remoteCall("trips/queries.listTrips", [filters, viewer]);
   await connectDB();
 
   const today = startOfToday();
@@ -140,6 +143,7 @@ export async function listTrips(
 
 /** Departure cities with upcoming trips, for the filter dropdown. */
 export async function listOrigins(): Promise<string[]> {
+  if (isFrontend()) return remoteCall("trips/queries.listOrigins", []);
   await connectDB();
   const origins = await Trip.distinct("origin", {
     status: "open",
@@ -150,6 +154,7 @@ export async function listOrigins(): Promise<string[]> {
 }
 
 export async function getTrip(slug: string, viewer: CurrentUser | null): Promise<TripDetail | null> {
+  if (isFrontend()) return remoteCall("trips/queries.getTrip", [slug, viewer]);
   await connectDB();
   const trip = await Trip.findOne({ slug }).lean<LeanTrip>();
   if (!trip) return null;
@@ -235,6 +240,7 @@ export async function getTrip(slug: string, viewer: CurrentUser | null): Promise
 }
 
 export async function getMyBookings(userId: string): Promise<MyBooking[]> {
+  if (isFrontend()) return remoteCall("trips/queries.getMyBookings", [userId]);
   await connectDB();
   const bookings = await Booking.find({ user: userId, status: "confirmed" })
     .populate<{ trip: LeanTrip | null }>("trip", "slug title origin destination startDate endDate")
@@ -275,6 +281,7 @@ export type MyAgeCheck = {
 
 /** The viewer's booking on a trip, as the age-check page needs it. Null if there's nothing to check. */
 export async function getMyAgeCheck(slug: string, userId: string): Promise<MyAgeCheck | null> {
+  if (isFrontend()) return remoteCall("trips/queries.getMyAgeCheck", [slug, userId]);
   await connectDB();
   const trip = await Trip.findOne({ slug }).select("title").lean();
   if (!trip) return null;
@@ -300,6 +307,7 @@ export async function getMyAgeCheck(slug: string, userId: string): Promise<MyAge
 // ---------------------------------------------------------------------------
 
 export async function trustScoresFor(userIds: string[]): Promise<Map<string, TrustScore>> {
+  if (isFrontend()) return remoteCall("trips/queries.trustScoresFor", [userIds]);
   await connectDB();
   const ids = [...new Set(userIds)].map((id) => new Types.ObjectId(id));
 
@@ -358,6 +366,7 @@ export type Profile = {
 };
 
 export async function getProfile(userId: string): Promise<Profile | null> {
+  if (isFrontend()) return remoteCall("trips/queries.getProfile", [userId]);
   await connectDB();
   const user = await User.findById(userId).lean<LeanUser>();
   if (!user) return null;
@@ -393,6 +402,7 @@ export async function listPlans(
   filters: { q?: string; month?: string },
   viewer: CurrentUser | null,
 ): Promise<TravelPlanSummary[]> {
+  if (isFrontend()) return remoteCall("trips/queries.listPlans", [filters, viewer]);
   await connectDB();
 
   const query: Record<string, unknown> = { status: "active", endDate: { $gte: startOfToday() } };
@@ -465,6 +475,7 @@ type MyPlan = {
 };
 
 export async function getMyPlans(userId: string): Promise<MyPlan[]> {
+  if (isFrontend()) return remoteCall("trips/queries.getMyPlans", [userId]);
   await connectDB();
   const plans = await TravelPlan.find({ user: userId }).sort({ startDate: 1 }).lean();
   const requests = await BuddyRequest.find({ plan: { $in: plans.map((p) => p._id) } })
@@ -488,6 +499,7 @@ export async function getMyPlans(userId: string): Promise<MyPlan[]> {
 }
 
 export async function getSentRequests(userId: string): Promise<BuddyRequestView[]> {
+  if (isFrontend()) return remoteCall("trips/queries.getSentRequests", [userId]);
   await connectDB();
   const requests = await BuddyRequest.find({ from: userId })
     .sort({ createdAt: -1 })

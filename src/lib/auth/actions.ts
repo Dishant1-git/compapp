@@ -1,7 +1,7 @@
 "use server";
 
 import bcrypt from "bcryptjs";
-import { revalidatePath } from "next/cache";
+import { revalidatePath } from "@/lib/revalidate";
 import { redirect } from "next/navigation";
 import { connectDB } from "@/lib/db/mongoose";
 import { Agency } from "@/lib/db/models/agency";
@@ -16,6 +16,7 @@ import { confirmEmailCode, sendEmailCode, sendVerificationEmail } from "./email-
 import { sendOtp } from "./otp";
 import { phoneOwner, signInWithPhone, SUSPENDED } from "./phone";
 import { createSession, deleteSession } from "./session";
+import { isFrontend, remoteAction } from "@/lib/remote";
 
 export type FormState = {
   errors?: Record<string, string[]>;
@@ -27,6 +28,7 @@ export type FormState = {
 const PLATFORMS: PlatformId[] = ["trips", "companion"];
 
 export async function login(_prev: FormState, formData: FormData): Promise<FormState> {
+  if (isFrontend()) return remoteAction("auth/actions.login", [_prev, formData]);
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
 
@@ -45,6 +47,7 @@ export async function login(_prev: FormState, formData: FormData): Promise<FormS
 }
 
 export async function register(_prev: FormState, formData: FormData): Promise<FormState> {
+  if (isFrontend()) return remoteAction("auth/actions.register", [_prev, formData]);
   const name = String(formData.get("name") ?? "").trim();
   const email = String(formData.get("email") ?? "").trim().toLowerCase();
   const password = String(formData.get("password") ?? "");
@@ -93,6 +96,7 @@ export async function sendPhoneCode(input: {
   number: string;
   mode: PhoneMode;
 }): Promise<{ ok: true; phone: string; devCode?: string } | { ok: false; error: string; retryAfter?: number }> {
+  if (isFrontend()) return remoteAction("auth/actions.sendPhoneCode", [input]);
   const phone = normalizePhone(String(input.countryCode), String(input.number));
   if (!phone) return { ok: false, error: "Enter a valid mobile number." };
 
@@ -117,6 +121,7 @@ export async function verifyPhoneCode(input: {
   name?: string;
   next?: string;
 }): Promise<{ ok: false; error: string }> {
+  if (isFrontend()) return remoteAction("auth/actions.verifyPhoneCode", [input]);
   const phone = String(input.phone ?? "");
   const code = String(input.code ?? "").trim();
   const name = String(input.name ?? "").trim().replace(/\s+/g, " ");
@@ -141,6 +146,7 @@ const PHONE_RE = /^\+?[0-9][0-9\s-]{7,15}$/;
 
 /** Sign up a travel agency: creates the owner account and a pending agency for admin review. */
 export async function registerAgency(_prev: FormState, formData: FormData): Promise<FormState> {
+  if (isFrontend()) return remoteAction("auth/actions.registerAgency", [_prev, formData]);
   const field = (key: string) => String(formData.get(key) ?? "").trim();
   const name = field("name");
   const email = field("email").toLowerCase();
@@ -230,6 +236,7 @@ const SIGNED_OUT = "Your session ended. Refresh the page and log in again.";
 export async function sendMyEmailCode(): Promise<
   { ok: true; email: string; devCode?: string } | { ok: false; error: string; retryAfter?: number }
 > {
+  if (isFrontend()) return remoteAction("auth/actions.sendMyEmailCode", []);
   const viewer = await getCurrentUser();
   if (!viewer) return { ok: false, error: SIGNED_OUT };
   return sendEmailCode(viewer.id);
@@ -237,6 +244,7 @@ export async function sendMyEmailCode(): Promise<
 
 /** Check that code and mark the email as verified. */
 export async function verifyMyEmailCode(code: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (isFrontend()) return remoteAction("auth/actions.verifyMyEmailCode", [code]);
   const viewer = await getCurrentUser();
   if (!viewer) return { ok: false, error: SIGNED_OUT };
   const digits = String(code ?? "").trim();
@@ -248,6 +256,7 @@ export async function verifyMyEmailCode(code: string): Promise<{ ok: true } | { 
 }
 
 export async function logout() {
+  if (isFrontend()) return remoteAction("auth/actions.logout", []);
   await deleteSession();
   redirect("/");
 }

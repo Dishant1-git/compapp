@@ -6,11 +6,8 @@ import { EmptyState } from "@/components/trips/page-header";
 import { ButtonLink } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { requireUser } from "@/lib/auth/dal";
-import { connectDB } from "@/lib/db/mongoose";
-import { Trip } from "@/lib/db/models/trip";
-import { groupAccess, listMessages } from "@/lib/trips/chat";
+import { getGroupPage } from "@/lib/trips/chat";
 import { formatDateRange } from "@/lib/trips/format";
-import { seatsTaken } from "@/lib/trips/seats";
 
 export const metadata: Metadata = {
   title: "Group chat",
@@ -20,12 +17,11 @@ export default async function GroupPage({ params }: PageProps<"/trips/[slug]/gro
   const { slug } = await params;
   const viewer = await requireUser(`/trips/${slug}/group`);
 
-  await connectDB();
-  const trip = await Trip.findOne({ slug }).select("title startDate endDate status").lean();
-  if (!trip) notFound();
+  const group = await getGroupPage(slug, viewer);
+  if (!group) notFound();
+  const { trip, chat } = group;
 
-  const access = await groupAccess(String(trip._id), viewer);
-  if (!access) {
+  if (!chat) {
     return (
       <Container className="py-10">
         <EmptyState
@@ -37,10 +33,7 @@ export default async function GroupPage({ params }: PageProps<"/trips/[slug]/gro
     );
   }
 
-  const [messages, members] = await Promise.all([
-    listMessages(access, viewer),
-    seatsTaken(trip._id),
-  ]);
+  const { messages, members } = chat;
 
   return (
     <Container className="max-w-3xl py-4 sm:py-8">
@@ -66,7 +59,7 @@ export default async function GroupPage({ params }: PageProps<"/trips/[slug]/gro
         </p>
       )}
 
-      <GroupChat tripId={String(trip._id)} initial={messages} canPost={access.canPost} />
+      <GroupChat tripId={trip.id} initial={messages} canPost={chat.canPost} />
       <p className="mt-2 text-xs text-muted-foreground">
         Be kind. Never share OTPs or send money to anyone in the chat — pay only the agency.
       </p>

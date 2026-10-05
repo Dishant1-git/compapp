@@ -3,6 +3,7 @@ import { connectDB } from "@/lib/db/mongoose";
 import { CompanionProfile } from "@/lib/db/models/companion-profile";
 import { User } from "@/lib/db/models/user";
 import { imageUrl, type CompanionDraft, type SelfieStatus } from "./types";
+import { isFrontend, remoteCall } from "@/lib/remote";
 
 export type CompanionAccount = {
   name: string;
@@ -14,6 +15,7 @@ export type CompanionAccount = {
 };
 
 export async function getCompanionAccount(userId: string): Promise<CompanionAccount | null> {
+  if (isFrontend()) return remoteCall("companion/queries.getCompanionAccount", [userId]);
   await connectDB();
   const user = await User.findById(userId).select("name phone email verification").lean();
   if (!user) return null;
@@ -29,6 +31,7 @@ export async function getCompanionAccount(userId: string): Promise<CompanionAcco
 export async function getCompanionDraft(
   userId: string,
 ): Promise<{ draft: CompanionDraft; active: boolean } | null> {
+  if (isFrontend()) return remoteCall("companion/queries.getCompanionDraft", [userId]);
   await connectDB();
   const [user, profile] = await Promise.all([
     User.findById(userId).select("name").lean(),

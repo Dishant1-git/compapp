@@ -3,6 +3,7 @@ import { Types } from "mongoose";
 import { connectDB } from "@/lib/db/mongoose";
 import { AgencyPlan } from "@/lib/db/models/agency-plan";
 import { agencyPlan } from "./pricing";
+import { isFrontend, remoteCall } from "@/lib/remote";
 
 export type PlanRow = {
   id: string;
@@ -25,6 +26,7 @@ function usable(agencyId: string, now = new Date()) {
 }
 
 export async function getTripCredits(agencyId: string): Promise<{ available: number; plans: PlanRow[] }> {
+  if (isFrontend()) return remoteCall("payments/credits.getTripCredits", [agencyId]);
   await connectDB();
   const plans = await AgencyPlan.find({ agency: agencyId }).sort({ createdAt: -1 }).limit(50).lean();
   const now = new Date();
@@ -46,6 +48,7 @@ export async function getTripCredits(agencyId: string): Promise<{ available: num
 
 /** Take one trip from the plan that expires soonest. Returns that plan's id, or null if none is left. */
 export async function takeTripCredit(agencyId: string) {
+  if (isFrontend()) return remoteCall("payments/credits.takeTripCredit", [agencyId]);
   const plan = await AgencyPlan.findOneAndUpdate(
     usable(agencyId),
     { $inc: { tripsUsed: 1 } },
@@ -56,5 +59,6 @@ export async function takeTripCredit(agencyId: string) {
 
 /** Give a trip back, when publishing failed after the credit was taken. */
 export async function returnTripCredit(planId: string) {
+  if (isFrontend()) return remoteCall("payments/credits.returnTripCredit", [planId]);
   await AgencyPlan.updateOne({ _id: planId, tripsUsed: { $gt: 0 } }, { $inc: { tripsUsed: -1 } });
 }

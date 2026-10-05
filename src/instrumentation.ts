@@ -8,13 +8,21 @@ export function register() {
 
   const env = (...keys: string[]) => keys.map((k) => process.env[k]?.trim()).find(Boolean);
 
+  // The frontend half of a split deployment only needs to know where the backend is.
+  const frontend = !!env("BACKEND_URL");
+
   const fatal: string[] = [];
-  if (!env("MONGODB_URI")) fatal.push("MONGODB_URI is not set.");
+  if (!frontend && !env("MONGODB_URI")) fatal.push("MONGODB_URI is not set.");
   const secret = env("SESSION_SECRET");
   if (!secret) fatal.push("SESSION_SECRET is not set.");
   else if (secret.length < 32) fatal.push("SESSION_SECRET is too short: use 32 random bytes, base64-encoded.");
+  if (frontend && !env("BACKEND_SECRET")) fatal.push("BACKEND_SECRET is not set (it must match the backend's).");
   if (fatal.length) {
     throw new Error(`Cannot start:\n- ${fatal.join("\n- ")}\nSee .env.example.`);
+  }
+  if (frontend) {
+    console.info(`[config] Frontend mode: data and actions are served by ${env("BACKEND_URL")}.`);
+    return;
   }
 
   const warnings: string[] = [];

@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { Logo } from "@/components/ui/logo";
 import { homeFor, requireUser } from "@/lib/auth/dal";
-import { connectDB } from "@/lib/db/mongoose";
 import { markAllNotificationsRead } from "@/lib/notification-actions";
 import { listNotifications } from "@/lib/notifications";
 import { cn } from "@/lib/utils";
@@ -23,7 +22,6 @@ const when = new Intl.DateTimeFormat("en-IN", {
 
 export default async function NotificationsPage() {
   const user = await requireUser("/notifications");
-  await connectDB();
   const items = await listNotifications(user.id);
   const unread = items.filter((n) => !n.read).length;
   const home = homeFor(user.role);

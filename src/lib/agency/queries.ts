@@ -9,6 +9,7 @@ import { ageOn, type AgeCheckStatus } from "@/lib/payments/pricing";
 import { ageFromBirthYear, firstName, toDateInput } from "@/lib/trips/format";
 import { groupsFor, toSummary, type LeanTrip, type LeanUser } from "@/lib/trips/queries";
 import type { TripSummary } from "@/lib/trips/types";
+import { isFrontend, remoteCall } from "@/lib/remote";
 
 export type AgencyTripRow = TripSummary & {
   status: "open" | "cancelled";
@@ -28,6 +29,7 @@ export type AgencyDashboard = {
 };
 
 export async function getAgencyDashboard(agencyId: string): Promise<AgencyDashboard> {
+  if (isFrontend()) return remoteCall("agency/queries.getAgencyDashboard", [agencyId]);
   await connectDB();
   const trips = await Trip.find({ agency: agencyId }).sort({ startDate: 1 }).lean<LeanTrip[]>();
   const ids = trips.map((t) => t._id);
@@ -105,6 +107,7 @@ export type AgencyTripDetail = {
 
 /** Everything an agency needs to run one of its trips. Returns null if it's not theirs. */
 export async function getAgencyTrip(agencyId: string, tripId: string): Promise<AgencyTripDetail | null> {
+  if (isFrontend()) return remoteCall("agency/queries.getAgencyTrip", [agencyId, tripId]);
   if (!Types.ObjectId.isValid(tripId)) return null;
   await connectDB();
   const trip = await Trip.findOne({ _id: tripId, agency: agencyId }).lean<LeanTrip>();
@@ -224,6 +227,7 @@ export type AgencyProfile = {
 };
 
 export async function getAgencyProfile(agencyId: string): Promise<AgencyProfile | null> {
+  if (isFrontend()) return remoteCall("agency/queries.getAgencyProfile", [agencyId]);
   await connectDB();
   const a = await Agency.findById(agencyId).lean();
   if (!a) return null;

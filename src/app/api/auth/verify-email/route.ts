@@ -1,9 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { confirmEmail } from "@/lib/auth/email-verification";
+import { confirmEmail, siteOrigin } from "@/lib/auth/email-verification";
 
 /** The link in the verification email lands here; then on to a page that says how it went. */
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token") ?? "";
   const ok = token.length < 2000 && (await confirmEmail(token));
-  return NextResponse.redirect(new URL(`/verify-email?status=${ok ? "done" : "invalid"}`, request.url));
+  // The site's public address, not this server's: in a split deployment they differ.
+  return NextResponse.redirect(`${await siteOrigin()}/verify-email?status=${ok ? "done" : "invalid"}`);
 }

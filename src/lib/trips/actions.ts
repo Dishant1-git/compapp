@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath } from "@/lib/revalidate";
 import { redirect } from "next/navigation";
 import { getCurrentUser, requireUser, requireVerified, safeNext } from "@/lib/auth/dal";
 import { connectDB } from "@/lib/db/mongoose";
@@ -22,6 +22,7 @@ import { groupAccess, postSystemMessage } from "./chat";
 import { GENDERS, REPORT_REASONS, type ReportReason } from "./constants";
 import { firstName, formatDateRange, formatPrice } from "./format";
 import type { ActionState } from "./types";
+import { isFrontend, remoteAction } from "@/lib/remote";
 
 // ---------------------------------------------------------------------------
 // Bookings
@@ -51,6 +52,7 @@ async function readIdImage(file: FormDataEntryValue | null) {
  * `doc-<n>` (a photo) and `type-<n>` for each traveller whose ID is needed.
  */
 export async function submitAgeDocuments(bookingId: string, formData: FormData): Promise<ActionState> {
+  if (isFrontend()) return remoteAction("trips/actions.submitAgeDocuments", [bookingId, formData]);
   const viewer = await requireUser();
   if (!ID_RE.test(bookingId)) return { message: "Booking not found." };
 
@@ -106,6 +108,7 @@ export async function submitAgeDocuments(bookingId: string, formData: FormData):
 
 /** Cancel your own booking. The seat fee is refunded by how long is left before departure. */
 export async function cancelBooking(bookingId: string) {
+  if (isFrontend()) return remoteAction("trips/actions.cancelBooking", [bookingId]);
   const viewer = await requireUser();
   if (!ID_RE.test(bookingId)) return;
 
@@ -151,6 +154,7 @@ export async function cancelBooking(bookingId: string) {
 // ---------------------------------------------------------------------------
 
 export async function updateProfile(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  if (isFrontend()) return remoteAction("trips/actions.updateProfile", [_prev, formData]);
   const viewer = await requireUser("/trips/profile");
 
   const name = text(formData, "name");
@@ -205,6 +209,7 @@ export async function updateProfile(_prev: ActionState, formData: FormData): Pro
 // ---------------------------------------------------------------------------
 
 export async function createTravelPlan(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  if (isFrontend()) return remoteAction("trips/actions.createTravelPlan", [_prev, formData]);
   const viewer = await requireVerified("/trips/buddies/new");
 
   const origin = text(formData, "origin");
@@ -242,6 +247,7 @@ export async function createTravelPlan(_prev: ActionState, formData: FormData): 
 }
 
 export async function closeTravelPlan(planId: string) {
+  if (isFrontend()) return remoteAction("trips/actions.closeTravelPlan", [planId]);
   const viewer = await requireUser();
   if (!ID_RE.test(planId)) return;
   await connectDB();
@@ -254,6 +260,7 @@ export async function sendBuddyRequest(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  if (isFrontend()) return remoteAction("trips/actions.sendBuddyRequest", [planId, _prev, formData]);
   const viewer = await getCurrentUser();
   if (!viewer) redirect("/login?next=/trips/buddies");
   if (!ID_RE.test(planId)) return { message: "Plan not found." };
@@ -288,6 +295,7 @@ export async function sendBuddyRequest(
 }
 
 export async function respondToBuddyRequest(requestId: string, decision: "accepted" | "declined") {
+  if (isFrontend()) return remoteAction("trips/actions.respondToBuddyRequest", [requestId, decision]);
   const viewer = await requireUser();
   if (!ID_RE.test(requestId) || !["accepted", "declined"].includes(decision)) return;
 
@@ -315,6 +323,7 @@ export async function respondToBuddyRequest(requestId: string, decision: "accept
 // ---------------------------------------------------------------------------
 
 export async function reportUser(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  if (isFrontend()) return remoteAction("trips/actions.reportUser", [_prev, formData]);
   const viewer = await requireUser();
 
   const reportedId = text(formData, "reportedId");
@@ -358,6 +367,7 @@ export async function reportUser(_prev: ActionState, formData: FormData): Promis
 
 /** Toggle "I'm interested" on a trip. Agencies see who's interested. */
 export async function toggleInterest(tripId: string) {
+  if (isFrontend()) return remoteAction("trips/actions.toggleInterest", [tripId]);
   const viewer = await getCurrentUser();
   if (!viewer) redirect("/login?next=/trips");
   if (!ID_RE.test(tripId) || viewer.role !== "user") return;
@@ -385,6 +395,7 @@ export async function sendMessage(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  if (isFrontend()) return remoteAction("trips/actions.sendMessage", [tripId, _prev, formData]);
   const viewer = await requireUser();
   const body = text(formData, "body");
   if (!body) return {};

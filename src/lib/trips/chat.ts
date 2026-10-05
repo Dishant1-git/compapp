@@ -7,6 +7,8 @@ import { Booking } from "@/lib/db/models/booking";
 import { Message } from "@/lib/db/models/message";
 import { Trip } from "@/lib/db/models/trip";
 import { firstName } from "./format";
+import { seatsTaken } from "./seats";
+import { isFrontend, remoteCall } from "@/lib/remote";
 
 export type ChatMessage = {
   id: string;
@@ -29,6 +31,7 @@ export type GroupAccess = {
  * running it, and admins (read-only, for moderation).
  */
 export async function groupAccess(tripId: string, viewer: CurrentUser): Promise<GroupAccess | null> {
+  if (isFrontend()) return remoteCall("trips/chat.groupAccess", [tripId, viewer]);
   if (!Types.ObjectId.isValid(tripId)) return null;
   await connectDB();
   const trip = await Trip.findById(tripId).select("agency").lean();
@@ -49,6 +52,7 @@ export async function listMessages(
   viewer: CurrentUser,
   after?: Date,
 ): Promise<ChatMessage[]> {
+  if (isFrontend()) return remoteCall("trips/chat.listMessages", [access, viewer, after]);
   const query: Record<string, unknown> = { trip: access.tripId };
   if (after) query.createdAt = { $gt: after };
 
@@ -78,8 +82,35 @@ export async function listMessages(
   });
 }
 
+export type GroupPage = {
+  trip: { id: string; title: string; startDate: string; endDate: string; status: string };
+  /** Null when the viewer isn't on the trip. */
+  chat: { canPost: boolean; messages: ChatMessage[]; members: number } | null;
+};
+
+/** Everything the group chat page shows for a trip, or null if there's no such trip. */
+export async function getGroupPage(slug: string, viewer: CurrentUser): Promise<GroupPage | null> {
+  if (isFrontend()) return remoteCall("trips/chat.getGroupPage", [slug, viewer]);
+  await connectDB();
+  const found = await Trip.findOne({ slug }).select("title startDate endDate status").lean();
+  if (!found) return null;
+  const trip = {
+    id: String(found._id),
+    title: found.title,
+    startDate: found.startDate.toISOString(),
+    endDate: found.endDate.toISOString(),
+    status: found.status,
+  };
+
+  const access = await groupAccess(trip.id, viewer);
+  if (!access) return { trip, chat: null };
+  const [messages, members] = await Promise.all([listMessages(access, viewer), seatsTaken(found._id)]);
+  return { trip, chat: { canPost: access.canPost, messages, members } };
+}
+
 /** Record a join/leave/cancellation in the group. Best-effort. */
 export async function postSystemMessage(tripId: string | Types.ObjectId, body: string) {
+  if (isFrontend()) return remoteCall("trips/chat.postSystemMessage", [tripId, body]);
   try {
     await Message.create({ trip: tripId, kind: "system", body });
   } catch (error) {

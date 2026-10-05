@@ -2,7 +2,7 @@
 
 import { randomBytes } from "node:crypto";
 import type { Types } from "mongoose";
-import { revalidatePath } from "next/cache";
+import { revalidatePath } from "@/lib/revalidate";
 import { getCurrentUser, getMyAgency, isVerified } from "@/lib/auth/dal";
 import { connectDB } from "@/lib/db/mongoose";
 import { Agency } from "@/lib/db/models/agency";
@@ -24,6 +24,7 @@ import {
 } from "./pricing";
 import { createOrder, gatewayMode, publicKeyId, validCheckoutSignature } from "./razorpay";
 import { settlePayment, type Settled } from "./settle";
+import { isFrontend, remoteAction } from "@/lib/remote";
 
 /** What the browser needs to collect a payment. Amount is in rupees. */
 export type Checkout =
@@ -92,6 +93,7 @@ async function openCheckout(
 // ─── Agencies: buy a plan ────────────────────────────────────────────────────
 
 export async function startPlanPurchase(planId: string): Promise<Checkout> {
+  if (isFrontend()) return remoteAction("payments/actions.startPlanPurchase", [planId]);
   const viewer = await getCurrentUser();
   if (!viewer) return fail(SIGNED_OUT);
   const agency = viewer.role === "agency" ? await getMyAgency(viewer.id) : null;
@@ -122,6 +124,7 @@ export type SeatBookingInput = {
 };
 
 export async function startSeatBooking(tripId: string, input: SeatBookingInput): Promise<Checkout> {
+  if (isFrontend()) return remoteAction("payments/actions.startSeatBooking", [tripId, input]);
   const viewer = await getCurrentUser();
   if (!viewer) return fail(SIGNED_OUT);
   if (viewer.role !== "user") return fail("Agency and admin accounts can't book trips.");
@@ -217,6 +220,7 @@ export async function confirmPayment(input: {
   paymentId: string;
   signature: string;
 }): Promise<Settled> {
+  if (isFrontend()) return remoteAction("payments/actions.confirmPayment", [input]);
   if (!(await getCurrentUser())) return fail(SIGNED_OUT);
   const orderId = String(input?.orderId ?? "");
   const paymentId = String(input?.paymentId ?? "");
@@ -228,6 +232,7 @@ export async function confirmPayment(input: {
 
 /** Development only, when no Razorpay keys are set: mark a simulated order as paid. */
 export async function confirmDevPayment(orderId: string): Promise<Settled> {
+  if (isFrontend()) return remoteAction("payments/actions.confirmDevPayment", [orderId]);
   const viewer = await getCurrentUser();
   if (!viewer) return fail(SIGNED_OUT);
   if (gatewayMode() !== "dev") return fail(UNAVAILABLE);

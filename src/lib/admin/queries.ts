@@ -13,6 +13,7 @@ import { Trip } from "@/lib/db/models/trip";
 import { User } from "@/lib/db/models/user";
 import { ID_DOC_TYPES, ageOn, agencyPlan, refundPercent, type AgeCheckStatus } from "@/lib/payments/pricing";
 import { getProfile, type LeanTrip, type LeanUser } from "@/lib/trips/queries";
+import { isFrontend, remoteCall } from "@/lib/remote";
 
 const PAGE = 100;
 
@@ -29,6 +30,7 @@ function iso(date?: Date | null) {
 // ---------------------------------------------------------------------------
 
 export async function getAdminStats() {
+  if (isFrontend()) return remoteCall("admin/queries.getAdminStats", []);
   await connectDB();
   const now = new Date();
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
@@ -119,6 +121,7 @@ export type AdminAgencyRow = {
 };
 
 export async function listAgencies(filters: { status?: string; q?: string }): Promise<AdminAgencyRow[]> {
+  if (isFrontend()) return remoteCall("admin/queries.listAgencies", [filters]);
   await connectDB();
   const query: Record<string, unknown> = {};
   if (filters.status) query.status = filters.status;
@@ -162,6 +165,7 @@ export async function listAgencies(filters: { status?: string; q?: string }): Pr
 }
 
 export async function getAdminAgency(agencyId: string) {
+  if (isFrontend()) return remoteCall("admin/queries.getAdminAgency", [agencyId]);
   if (!Types.ObjectId.isValid(agencyId)) return null;
   const profile = await getAgencyProfile(agencyId);
   if (!profile) return null;
@@ -204,6 +208,7 @@ export type AdminUserRow = {
 };
 
 export async function listUsers(filters: { q?: string; role?: string; status?: string }): Promise<AdminUserRow[]> {
+  if (isFrontend()) return remoteCall("admin/queries.listUsers", [filters]);
   await connectDB();
   const query: Record<string, unknown> = {};
   if (filters.role) query.role = filters.role;
@@ -240,6 +245,7 @@ export async function listUsers(filters: { q?: string; role?: string; status?: s
 }
 
 export async function getAdminUser(userId: string) {
+  if (isFrontend()) return remoteCall("admin/queries.getAdminUser", [userId]);
   if (!Types.ObjectId.isValid(userId)) return null;
   await connectDB();
   const user = await User.findById(userId).lean<LeanUser>();
@@ -295,6 +301,7 @@ export type AdminTripRow = {
 };
 
 export async function listTrips(filters: { q?: string; when?: string }): Promise<AdminTripRow[]> {
+  if (isFrontend()) return remoteCall("admin/queries.listTrips", [filters]);
   await connectDB();
   const now = new Date();
   const query: Record<string, unknown> = {};
@@ -351,6 +358,7 @@ export async function listBookings(filters: {
   userId?: string;
   limit?: number;
 }): Promise<AdminBookingRow[]> {
+  if (isFrontend()) return remoteCall("admin/queries.listBookings", [filters]);
   await connectDB();
   const query: Record<string, unknown> = {};
   if (filters.status) query.status = filters.status;
@@ -403,6 +411,7 @@ export async function listReports(filters: {
   reportedId?: string;
   reporterId?: string;
 }): Promise<AdminReportRow[]> {
+  if (isFrontend()) return remoteCall("admin/queries.listReports", [filters]);
   await connectDB();
   const query: Record<string, unknown> = {};
   if (filters.status) query.status = filters.status;
@@ -448,6 +457,7 @@ export type AdminSelfieReview = {
 
 /** Companion selfies to check against each person's profile photos. Oldest first when pending. */
 export async function listSelfieReviews(status: AdminSelfieReview["status"]): Promise<AdminSelfieReview[]> {
+  if (isFrontend()) return remoteCall("admin/queries.listSelfieReviews", [status]);
   await connectDB();
   const profiles = await CompanionProfile.find({ "selfie.status": status, "selfie.image": { $exists: true } })
     .sort({ "selfie.submittedAt": status === "pending" ? 1 : -1 })
@@ -492,6 +502,7 @@ export type AdminAgeCheck = {
 };
 
 export async function listAgeChecks(status: AgeCheckStatus): Promise<AdminAgeCheck[]> {
+  if (isFrontend()) return remoteCall("admin/queries.listAgeChecks", [status]);
   await connectDB();
   const bookings = await Booking.find({ "ageCheck.status": status })
     .sort(status === "pending" ? { "ageCheck.submittedAt": 1 } : { updatedAt: -1 })
@@ -536,6 +547,7 @@ export async function listAgeChecks(status: AgeCheckStatus): Promise<AdminAgeChe
 }
 
 export async function countPendingAgeChecks() {
+  if (isFrontend()) return remoteCall("admin/queries.countPendingAgeChecks", []);
   await connectDB();
   return Booking.countDocuments({ "ageCheck.status": "pending" });
 }
@@ -558,6 +570,7 @@ export type AdminPaymentRow = {
 
 /** Money taken through the gateway, newest first. Unpaid checkout attempts are left out. */
 export async function listPayments(filters: { purpose?: string }) {
+  if (isFrontend()) return remoteCall("admin/queries.listPayments", [filters]);
   await connectDB();
   const query: Record<string, unknown> = { status: { $ne: "created" } };
   if (filters.purpose) query.purpose = filters.purpose;
@@ -597,7 +610,21 @@ export async function listPayments(filters: { purpose?: string }) {
   return { rows, paid: totals[0]?.paid ?? 0, refunded: totals[0]?.refunded ?? 0 };
 }
 
+/** Things waiting on an admin, shown as counts in the admin navigation. */
+export async function countAdminBadges() {
+  if (isFrontend()) return remoteCall("admin/queries.countAdminBadges", []);
+  await connectDB();
+  const [agencies, reports, selfies, ageChecks] = await Promise.all([
+    Agency.countDocuments({ status: "pending" }),
+    Report.countDocuments({ status: "open" }),
+    countPendingSelfies(),
+    countPendingAgeChecks(),
+  ]);
+  return { agencies, reports, selfies, ageChecks };
+}
+
 export async function countPendingSelfies() {
+  if (isFrontend()) return remoteCall("admin/queries.countPendingSelfies", []);
   await connectDB();
   return CompanionProfile.countDocuments({ "selfie.status": "pending" });
 }

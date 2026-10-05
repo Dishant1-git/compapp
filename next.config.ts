@@ -38,6 +38,19 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
+  // Frontend/backend split (see src/lib/remote.ts): on the frontend deployment the
+  // API routes (images, ID documents, chat polling, token login, webhooks) are
+  // served by the backend. The internal bridge endpoint is not exposed this way.
+  async rewrites() {
+    const backend = process.env.BACKEND_URL?.trim().replace(/\/+$/, "");
+    return {
+      beforeFiles: backend
+        ? [{ source: "/api/:path((?!internal/).*)", destination: `${backend}/api/:path` }]
+        : [],
+      afterFiles: [],
+      fallback: [],
+    };
+  },
 };
 
 export default nextConfig;

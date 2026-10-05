@@ -1,0 +1,42 @@
+# Render Blueprint: in the Render dashboard choose New > Blueprint and pick this repository.
+# Render asks for every value marked "sync: false" when the service is created.
+services:
+  - type: web
+    name: compapp
+    runtime: node
+    region: singapore
+    # Companion's photo checks keep TensorFlow models in memory: the 512 MB plans can run
+    # out during a selfie check. Move to "standard" (2 GB) if that happens.
+    plan: starter
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22.20.0
+      # Hosted MongoDB (Atlas) connection string, ending in /compapp before the "?".
+      - key: MONGODB_URI
+        sync: false
+      # 32 random bytes, base64. Signs login cookies: use a new one, not the one from your PC.
+      # In a split deployment, copy this exact value into Vercel as well.
+      - key: SESSION_SECRET
+        generateValue: true
+      # The site's public address: the Vercel address if the frontend is on Vercel,
+      # otherwise this service's own (e.g. https://compapp.onrender.com). Used in emails.
+      - key: APP_URL
+        sync: false
+      # Only for a split deployment (frontend on Vercel): a long random password the
+      # frontend must send. Put the same value in Vercel. Leave empty otherwise.
+      - key: BACKEND_SECRET
+        sync: false
+      - key: RAZORPAY_KEY_ID
+        sync: false
+      - key: RAZORPAY_KEY_SECRET
+        sync: false
+      # From the Razorpay dashboard, for the webhook at <APP_URL>/api/payments/razorpay/webhook.
+      - key: RAZORPAY_WEBHOOK_SECRET
+        sync: false
+      - key: BREVO_API_KEY
+        sync: false
+      - key: BREVO_SENDER_EMAIL
+        sync: false

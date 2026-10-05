@@ -63,6 +63,34 @@ the login cookie is only sent over HTTPS in production. If you use nginx, allow 
 
 On start-up the server logs a `[config]` warning for each optional setting that is missing.
 
+### Frontend on Vercel, backend on Render
+
+The same code can be deployed twice: once as the **backend** (database, payments, email,
+logins) and once as the **frontend**, which only renders pages and asks the backend for
+everything else. How it works is described at the top of `src/lib/remote.ts`.
+
+1. **Backend on Render**: New > Blueprint > this repository (`render.yaml`). Fill in the
+   settings from the table above, plus `BACKEND_SECRET` (a long random password). Set
+   `APP_URL` to the Vercel address, since that is where visitors are.
+2. **Frontend on Vercel**: import the repository and set only these four, then deploy:
+
+   | Setting | Value |
+   |---|---|
+   | `BACKEND_URL` | The Render address, e.g. `https://compapp.onrender.com` |
+   | `BACKEND_SECRET` | The same value as on Render |
+   | `SESSION_SECRET` | The same value as on Render (copy it from Render's Environment tab) |
+   | `APP_URL` | The Vercel address |
+
+   `BACKEND_URL` is read when the site is built, so redeploy after changing it.
+3. Point the Razorpay webhook at either address: `/api/*` on Vercel is passed to Render.
+
+Every page view makes a few calls from Vercel to Render, so pick regions close to each
+other (Render `singapore` with Vercel `sin1` or `bom1`). Render's free plan sleeps when idle
+and makes the first page after a pause very slow; use a paid plan.
+
+When you add a new data function or Server Action, run `node scripts/add-remote-guards.mjs`
+so it works in the split too.
+
 **After the first deploy**
 
 1. Don't run `npm run seed` against the production database: it creates demo accounts with a known password.

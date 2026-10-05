@@ -1,9 +1,7 @@
 import Link from "next/link";
-import { connectDB } from "@/lib/db/mongoose";
 import { unreadCount } from "@/lib/notifications";
 
 export async function NotificationBell({ userId }: { userId: string }) {
-  await connectDB();
   const count = await unreadCount(userId);
 
   return (

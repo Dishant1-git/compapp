@@ -2,21 +2,11 @@ import "server-only";
 import { cookies, headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
-import { connectDB } from "@/lib/db/mongoose";
-import { Agency, type AgencyStatus } from "@/lib/db/models/agency";
-import { User } from "@/lib/db/models/user";
+import { loadAgency, loadUser, loadVerified, type CurrentAgency, type CurrentUser, type Role } from "./account";
 import { decrypt, SESSION_COOKIE } from "./session";
 import { bearerToken } from "./token";
 
-export type Role = "user" | "agency" | "admin";
-
-export type CurrentUser = {
-  id: string;
-  name: string;
-  email: string;
-  role: Role;
-  personality: string[];
-};
+export type { CurrentAgency, CurrentUser, Role };
 
 /**
  * The signed-in user, or null. Suspended accounts count as signed out. Memoized per request.
@@ -27,21 +17,7 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   const token =
     (await cookies()).get(SESSION_COOKIE)?.value ?? bearerToken((await headers()).get("authorization"));
   const session = await decrypt(token);
-  if (!session?.userId) return null;
-
-  await connectDB();
-  const user = await User.findById(session.userId)
-    .select("name email role status personality")
-    .lean();
-  if (!user || user.status === "suspended") return null;
-
-  return {
-    id: String(user._id),
-    name: user.name,
-    email: user.email ?? "",
-    role: user.role as Role,
-    personality: user.personality ?? [],
-  };
+  return session?.userId ? loadUser(session.userId) : null;
 });
 
 /** Like getCurrentUser, but redirects to /login when signed out. */
@@ -55,11 +31,7 @@ export async function requireUser(next?: string): Promise<CurrentUser> {
  * Has this account proved it's a real person: a verified phone number or a
  * verified email address? Needed to book trips and to use Companion.
  */
-export const isVerified = cache(async (userId: string) => {
-  await connectDB();
-  const user = await User.findById(userId).select("email verification").lean();
-  return !!user && (!!user.verification?.phone || (!!user.email && !!user.verification?.email));
-});
+export const isVerified = cache((userId: string) => loadVerified(userId));
 
 /** For pages only verified accounts can use: sends the others to verify, then back to `next`. */
 export async function requireVerified(next: string): Promise<CurrentUser> {
@@ -75,25 +47,8 @@ export async function requireRole(roles: Role[], next?: string): Promise<Current
   return user;
 }
 
-export type CurrentAgency = {
-  id: string;
-  name: string;
-  status: AgencyStatus;
-  reviewNote?: string;
-};
-
 /** The agency owned by the signed-in user, if any. */
-export const getMyAgency = cache(async (userId: string): Promise<CurrentAgency | null> => {
-  await connectDB();
-  const agency = await Agency.findOne({ owner: userId }).select("name status reviewNote").lean();
-  if (!agency) return null;
-  return {
-    id: String(agency._id),
-    name: agency.name,
-    status: agency.status as AgencyStatus,
-    reviewNote: agency.reviewNote ?? undefined,
-  };
-});
+export const getMyAgency = cache((userId: string) => loadAgency(userId));
 
 /** Where each role lands after signing in. */
 export function homeFor(role: Role) {

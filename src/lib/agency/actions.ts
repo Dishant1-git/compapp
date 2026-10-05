@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath } from "@/lib/revalidate";
 import { redirect } from "next/navigation";
 import { getMyAgency, requireRole, type CurrentAgency } from "@/lib/auth/dal";
 import { connectDB } from "@/lib/db/mongoose";
@@ -25,6 +25,7 @@ import { cancelTripAndBookings } from "@/lib/trips/cancel";
 import { seatsTaken } from "@/lib/trips/seats";
 import { postSystemMessage } from "@/lib/trips/chat";
 import type { ActionState } from "@/lib/trips/types";
+import { isFrontend, remoteAction } from "@/lib/remote";
 
 async function requireAgency(): Promise<CurrentAgency> {
   const user = await requireRole(["agency"], "/agency");
@@ -114,6 +115,7 @@ function parseTripForm(formData: FormData, { allowPastStart = false } = {}) {
 // ---------------------------------------------------------------------------
 
 export async function createTrip(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  if (isFrontend()) return remoteAction("agency/actions.createTrip", [_prev, formData]);
   const agency = await requireAgency();
   if (agency.status !== "approved") {
     return { message: "Your agency must be approved by an admin before you can publish trips." };
@@ -147,6 +149,7 @@ export async function createTrip(_prev: ActionState, formData: FormData): Promis
 }
 
 export async function updateTrip(tripId: string, _prev: ActionState, formData: FormData): Promise<ActionState> {
+  if (isFrontend()) return remoteAction("agency/actions.updateTrip", [tripId, _prev, formData]);
   const agency = await requireAgency();
   if (!ID_RE.test(tripId)) return { message: "Trip not found." };
 
@@ -188,6 +191,7 @@ export async function cancelTripAsAgency(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  if (isFrontend()) return remoteAction("agency/actions.cancelTripAsAgency", [tripId, _prev, formData]);
   const agency = await requireAgency();
   const reason = text(formData, "reason");
   if (reason.length < 5) return { errors: { reason: ["Tell travellers why (5+ characters)."] } };
@@ -203,6 +207,7 @@ export async function cancelTripAsAgency(
 }
 
 export async function setBookingPaid(bookingId: string, paid: boolean) {
+  if (isFrontend()) return remoteAction("agency/actions.setBookingPaid", [bookingId, paid]);
   const agency = await requireAgency();
   if (!ID_RE.test(bookingId)) return;
 
@@ -224,6 +229,7 @@ export async function setBookingPaid(bookingId: string, paid: boolean) {
 // ---------------------------------------------------------------------------
 
 export async function updateAgencyProfile(_prev: ActionState, formData: FormData): Promise<ActionState> {
+  if (isFrontend()) return remoteAction("agency/actions.updateAgencyProfile", [_prev, formData]);
   const current = await requireAgency();
 
   const name = text(formData, "name");

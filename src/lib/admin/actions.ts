@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath } from "@/lib/revalidate";
 import { requireRole } from "@/lib/auth/dal";
 import { connectDB } from "@/lib/db/mongoose";
 import { Agency, AGENCY_STATUSES, type AgencyStatus } from "@/lib/db/models/agency";
@@ -18,6 +18,7 @@ import { cancelTripAndBookings } from "@/lib/trips/cancel";
 import { postSystemMessage } from "@/lib/trips/chat";
 import { firstName, formatPrice } from "@/lib/trips/format";
 import type { ActionState } from "@/lib/trips/types";
+import { isFrontend, remoteAction } from "@/lib/remote";
 
 const requireAdmin = () => requireRole(["admin"], "/admin");
 
@@ -34,6 +35,7 @@ export async function setAgencyStatus(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  if (isFrontend()) return remoteAction("admin/actions.setAgencyStatus", [agencyId, status, _prev, formData]);
   const admin = await requireAdmin();
   if (!ID_RE.test(agencyId) || !AGENCY_STATUSES.includes(status)) return { message: "Invalid request." };
 
@@ -62,6 +64,7 @@ export async function setAgencyStatus(
 }
 
 export async function setUserStatus(userId: string, status: "active" | "suspended") {
+  if (isFrontend()) return remoteAction("admin/actions.setUserStatus", [userId, status]);
   const admin = await requireAdmin();
   if (!ID_RE.test(userId) || userId === admin.id) return;
   if (status !== "active" && status !== "suspended") return;
@@ -73,6 +76,7 @@ export async function setUserStatus(userId: string, status: "active" | "suspende
 
 /** Promote a traveller to admin or demote an admin. Agency owners keep their role. */
 export async function setUserRole(userId: string, role: "user" | "admin") {
+  if (isFrontend()) return remoteAction("admin/actions.setUserRole", [userId, role]);
   const admin = await requireAdmin();
   if (!ID_RE.test(userId) || userId === admin.id) return;
   if (role !== "user" && role !== "admin") return;
@@ -87,6 +91,7 @@ export async function cancelTripAsAdmin(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  if (isFrontend()) return remoteAction("admin/actions.cancelTripAsAdmin", [tripId, _prev, formData]);
   await requireAdmin();
   const reason = text(formData, "reason");
   if (reason.length < 5) return { errors: { reason: ["Add a reason (5+ characters)."] } };
@@ -112,6 +117,7 @@ export async function cancelTripAsAdmin(
 
 /** "reviewed" means the report was upheld — it then lowers the reported user's trust score. */
 export async function resolveReport(reportId: string, status: "reviewed" | "dismissed") {
+  if (isFrontend()) return remoteAction("admin/actions.resolveReport", [reportId, status]);
   await requireAdmin();
   if (!ID_RE.test(reportId) || (status !== "reviewed" && status !== "dismissed")) return;
 
@@ -156,6 +162,7 @@ async function decideAgeCheck(bookingId: string, adminId: string, status: "verif
 }
 
 export async function approveAgeCheck(bookingId: string) {
+  if (isFrontend()) return remoteAction("admin/actions.approveAgeCheck", [bookingId]);
   const admin = await requireAdmin();
   if (!ID_RE.test(bookingId)) return;
   const booking = await decideAgeCheck(bookingId, admin.id, "verified");
@@ -174,6 +181,7 @@ export async function requestNewAgeDocument(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  if (isFrontend()) return remoteAction("admin/actions.requestNewAgeDocument", [bookingId, _prev, formData]);
   const admin = await requireAdmin();
   if (!ID_RE.test(bookingId)) return { message: "Invalid request." };
   const note = text(formData, "note").slice(0, 300);
@@ -195,6 +203,7 @@ export async function rejectAgeCheck(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  if (isFrontend()) return remoteAction("admin/actions.rejectAgeCheck", [bookingId, _prev, formData]);
   const admin = await requireAdmin();
   if (!ID_RE.test(bookingId)) return { message: "Invalid request." };
   const note = text(formData, "note").slice(0, 300);
@@ -257,6 +266,7 @@ async function reviewSelfie(profileId: string, selfieId: string, status: "verifi
 }
 
 export async function approveSelfie(profileId: string, selfieId: string) {
+  if (isFrontend()) return remoteAction("admin/actions.approveSelfie", [profileId, selfieId]);
   await requireAdmin();
   if (!ID_RE.test(profileId) || !ID_RE.test(selfieId)) return;
   await reviewSelfie(profileId, selfieId, "verified");
@@ -268,6 +278,7 @@ export async function rejectSelfie(
   _prev: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
+  if (isFrontend()) return remoteAction("admin/actions.rejectSelfie", [profileId, selfieId, _prev, formData]);
   await requireAdmin();
   if (!ID_RE.test(profileId) || !ID_RE.test(selfieId)) return { message: "Invalid request." };
   const note = text(formData, "note");
