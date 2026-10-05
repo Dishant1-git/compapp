@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { EmailVerification } from "@/components/auth/email-verification";
 import { PageHeader } from "@/components/trips/page-header";
 import { ProfileForm } from "@/components/trips/profile-form";
 import { TrustScoreCard } from "@/components/trips/trust-score-card";
@@ -31,8 +32,9 @@ export default async function ProfilePage({ searchParams }: PageProps<"/trips/pr
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px]">
         <ProfileForm profile={initial} next={typeof next === "string" ? next : undefined} />
-        <aside className="lg:sticky lg:top-24 lg:self-start">
+        <aside className="space-y-6 lg:sticky lg:top-24 lg:self-start">
           <TrustScoreCard trust={trust} verification={verification} />
+          <EmailVerification email={email} verified={verification.email} />
         </aside>
       </div>
     </Container>

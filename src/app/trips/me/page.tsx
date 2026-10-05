@@ -5,6 +5,7 @@ import { RequestCard } from "@/components/trips/request-card";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { requireUser } from "@/lib/auth/dal";
+import { AGE_CHECK_LABELS } from "@/lib/payments/pricing";
 import { closeTravelPlan } from "@/lib/trips/actions";
 import { durationLabel, formatDateRange, formatPrice } from "@/lib/trips/format";
 import { getMyBookings, getMyPlans, getSentRequests } from "@/lib/trips/queries";
@@ -143,12 +144,24 @@ function BookingRow({ booking, showChat }: { booking: MyBooking; showChat?: bool
         <p className="mt-1 text-sm">
           {formatPrice(booking.amount)}
           <span className="text-muted-foreground capitalize"> · {booking.paymentStatus}</span>
+          <span className="text-muted-foreground">
+            {booking.seats > 1 ? ` · ${booking.seats} seats` : ""}
+            {booking.feePaid ? ` · seat fee ${formatPrice(booking.feePaid)} paid` : ""}
+            {booking.ageCheck ? ` · ${AGE_CHECK_LABELS[booking.ageCheck]}` : ""}
+          </span>
         </p>
       </div>
       {showChat && (
-        <ButtonLink href={`/trips/${trip.slug}/group`} size="sm" variant="outline" className="shrink-0">
-          Group chat
-        </ButtonLink>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {booking.ageCheck === "required" && (
+            <ButtonLink href={`/trips/${trip.slug}/verify-age`} size="sm">
+              Upload ID
+            </ButtonLink>
+          )}
+          <ButtonLink href={`/trips/${trip.slug}/group`} size="sm" variant="outline">
+            Group chat
+          </ButtonLink>
+        </div>
       )}
     </li>
   );

@@ -1,21 +1,21 @@
 "use client";
 
-import Link from "next/link";
-import { useActionState } from "react";
 import { Button, ButtonLink } from "@/components/ui/button";
-import { bookTrip, cancelBooking } from "@/lib/trips/actions";
+import { AGE_CHECK_LABELS, GROUP_MIN_SIZE, GROUP_SEAT_FEE, SEAT_FEE, type AgeCheckStatus } from "@/lib/payments/pricing";
+import { cancelBooking } from "@/lib/trips/actions";
 import { formatPrice } from "@/lib/trips/format";
-import type { ActionState } from "@/lib/trips/types";
-import { cn } from "@/lib/utils";
 
 type Props = {
-  tripId: string;
   slug: string;
   price: number;
   maxGroupSize: number;
   bookedCount: number;
   minAge: number;
   myBookingId: string | null;
+  /** The viewer's booking, if any. */
+  myBooking: { seats: number; ageCheck: AgeCheckStatus | null } | null;
+  /** Seat fee they'd get back by cancelling now (0 if none is due). */
+  cancelRefund: number;
   bookable: boolean;
   closedReason?: string;
   signedIn: boolean;
@@ -26,10 +26,10 @@ type Props = {
 };
 
 export function BookingPanel(props: Props) {
-  const [state, action, pending] = useActionState<ActionState>(bookTrip.bind(null, props.tripId), {});
   const seatsLeft = Math.max(0, props.maxGroupSize - props.bookedCount);
   const filled = Math.min(100, Math.round((props.bookedCount / props.maxGroupSize) * 100));
   const here = `/trips/${props.slug}`;
+  const ageCheck = props.myBooking?.ageCheck;
 
   return (
     <div id="book" className="scroll-mt-20 rounded-xl border bg-card p-5 text-card-foreground sm:p-6">
@@ -52,21 +52,42 @@ export function BookingPanel(props: Props) {
         {props.myBookingId ? (
           <>
             <p className="rounded-lg bg-muted px-4 py-3 text-sm font-medium">
-              You&apos;re going on this trip.
+              You&apos;re going on this trip
+              {props.myBooking && props.myBooking.seats > 1 ? ` (${props.myBooking.seats} seats).` : "."}
             </p>
-            <ButtonLink href={`${here}/group`} size="lg" fullWidth className="mt-3">
+            {ageCheck && ageCheck !== "verified" && (
+              <ButtonLink
+                href={`${here}/verify-age`}
+                size="lg"
+                variant={ageCheck === "required" ? "primary" : "outline"}
+                fullWidth
+                className="mt-3"
+              >
+                {ageCheck === "required" ? "Upload ID to verify age" : AGE_CHECK_LABELS[ageCheck]}
+              </ButtonLink>
+            )}
+            <ButtonLink
+              href={`${here}/group`}
+              size="lg"
+              variant={ageCheck === "required" ? "outline" : "primary"}
+              fullWidth
+              className="mt-3"
+            >
               Open group chat
             </ButtonLink>
             {props.bookable && (
               <form
                 action={cancelBooking.bind(null, props.myBookingId)}
                 onSubmit={(e) => {
-                  if (!confirm("Cancel your seat on this trip?")) e.preventDefault();
+                  const refund = props.cancelRefund
+                    ? `${formatPrice(props.cancelRefund)} of your seat fee will be refunded.`
+                    : "Your seat fee won't be refunded this close to departure.";
+                  if (!confirm(`Cancel your booking on this trip? ${refund}`)) e.preventDefault();
                 }}
                 className="mt-3"
               >
                 <Button type="submit" variant="outline" fullWidth>
-                  Cancel my seat
+                  Cancel my booking
                 </Button>
               </form>
             )}
@@ -84,41 +105,19 @@ export function BookingPanel(props: Props) {
             {props.closedReason ?? "Trip is full"}
           </Button>
         ) : (
-          <form action={action}>
-            <Button type="submit" size="lg" fullWidth disabled={pending}>
-              {pending ? "Reserving…" : "Reserve my seat"}
-            </Button>
-          </form>
+          <ButtonLink href={`${here}/book`} size="lg" fullWidth>
+            Reserve my seat · {formatPrice(SEAT_FEE)}
+          </ButtonLink>
         )}
 
-        {state.message && (
-          <p
-            role="status"
-            className={cn(
-              "mt-3 rounded-lg px-4 py-3 text-sm",
-              state.success ? "bg-muted" : "border border-destructive/40 text-destructive",
-            )}
-          >
-            {state.message}
-            {state.errors?.profile && (
-              <>
-                {" "}
-                <Link
-                  href={`/trips/profile?next=${encodeURIComponent(here)}`}
-                  className="font-medium underline underline-offset-4"
-                >
-                  Complete profile
-                </Link>
-              </>
-            )}
-          </p>
-        )}
         {props.children && <div className="mt-3">{props.children}</div>}
       </div>
 
       <p className="mt-4 text-xs text-muted-foreground">
-        No online payment yet — pay the agency directly. Free cancellation until departure. When you
-        book, your name, phone and emergency contact are shared with the agency running the trip.
+        A {formatPrice(SEAT_FEE)} seat fee reserves your place ({formatPrice(GROUP_SEAT_FEE)} each for groups of{" "}
+        {GROUP_MIN_SIZE} or more). The trip price is paid to the agency directly. After paying you upload a photo
+        ID so we can check your age. When you book, your name, phone and emergency contact are shared with the
+        agency running the trip.
       </p>
     </div>
   );

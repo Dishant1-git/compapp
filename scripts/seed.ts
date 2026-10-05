@@ -8,10 +8,13 @@
 import bcrypt from "bcryptjs";
 import mongoose, { Types } from "mongoose";
 import { Agency } from "@/lib/db/models/agency";
+import { AgencyPlan } from "@/lib/db/models/agency-plan";
 import { Booking } from "@/lib/db/models/booking";
 import { BuddyRequest } from "@/lib/db/models/buddy-request";
+import { IdDocument } from "@/lib/db/models/id-document";
 import { Message } from "@/lib/db/models/message";
 import { Notification } from "@/lib/db/models/notification";
+import { Payment } from "@/lib/db/models/payment";
 import { Report } from "@/lib/db/models/report";
 import { TravelPlan } from "@/lib/db/models/travel-plan";
 import { Trip } from "@/lib/db/models/trip";
@@ -220,6 +223,9 @@ async function main() {
     Notification.deleteMany({ user: { $in: oldIds } }),
     Trip.deleteMany({ _id: { $in: oldTripIds } }),
     Agency.deleteMany({ _id: { $in: oldAgencies.map((a) => a._id) } }),
+    AgencyPlan.deleteMany({ agency: { $in: oldAgencies.map((a) => a._id) } }),
+    Payment.deleteMany({ user: { $in: oldIds } }),
+    IdDocument.deleteMany({ owner: { $in: oldIds } }),
   ]);
   await User.deleteMany({ _id: { $in: oldIds } });
 
@@ -277,6 +283,15 @@ async function main() {
     registrationNumber: "30AAFCC5678K1Z2",
     description: "Surf camps and coastal road trips along the Konkan coast.",
   }, "pending");
+
+  // Wanderlust starts with a monthly plan so it can publish trips; Himalayan has none, to try buying one.
+  await AgencyPlan.create({
+    agency: wanderlust._id,
+    plan: "monthly",
+    tripsTotal: 10,
+    expiresAt: new Date(Date.now() + 30 * DAY),
+    price: 12500,
+  });
 
   const HIMALAYAN = new Set(["Kasol & Kheerganga Trek", "Spiti Valley Circuit", "Valley of Flowers Trek", "McLeodganj & Triund", "Manali Weekend Escape"]);
 

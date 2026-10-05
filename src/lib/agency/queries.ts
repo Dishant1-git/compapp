@@ -5,6 +5,7 @@ import { Agency, type AgencyStatus } from "@/lib/db/models/agency";
 import { Booking } from "@/lib/db/models/booking";
 import { Trip } from "@/lib/db/models/trip";
 import { TripInterest } from "@/lib/db/models/trip-interest";
+import { ageOn, type AgeCheckStatus } from "@/lib/payments/pricing";
 import { ageFromBirthYear, firstName, toDateInput } from "@/lib/trips/format";
 import { groupsFor, toSummary, type LeanTrip, type LeanUser } from "@/lib/trips/queries";
 import type { TripSummary } from "@/lib/trips/types";
@@ -37,7 +38,7 @@ export async function getAgencyDashboard(agencyId: string): Promise<AgencyDashbo
       { $match: { trip: { $in: ids } } },
       { $group: { _id: "$trip", count: { $sum: 1 } } },
     ]),
-    Booking.find({ trip: { $in: ids }, status: "confirmed" }).select("trip amount paymentStatus").lean(),
+    Booking.find({ trip: { $in: ids }, status: "confirmed" }).select("trip amount paymentStatus seats").lean(),
   ]);
 
   const now = new Date();
@@ -54,7 +55,7 @@ export async function getAgencyDashboard(agencyId: string): Promise<AgencyDashbo
   return {
     stats: {
       upcomingTrips: trips.filter((t) => t.status === "open" && t.endDate >= now).length,
-      travellers: bookings.length,
+      travellers: bookings.reduce((sum, b) => sum + (b.seats ?? 1), 0),
       interested: interests.reduce((sum, i) => sum + i.count, 0),
       bookedValue: bookings.reduce((sum, b) => sum + b.amount, 0),
       paidValue: bookings.filter((b) => b.paymentStatus === "paid").reduce((sum, b) => sum + b.amount, 0),
@@ -76,6 +77,10 @@ export type Traveller = {
   paymentStatus: string;
   amount: number;
   bookedAt: string;
+  seats: number;
+  /** Others travelling on the same booking, with their ages. */
+  companions: { name: string; age: number | null }[];
+  ageCheck: AgeCheckStatus | null;
 };
 
 export type InterestedPerson = {
@@ -124,6 +129,7 @@ export async function getAgencyTrip(agencyId: string, tripId: string): Promise<A
   const group = confirmed.map((b) => ({
     userId: String(b.user!._id),
     personality: b.user!.personality ?? [],
+    seats: b.seats ?? 1,
   }));
 
   return {
@@ -152,6 +158,12 @@ export async function getAgencyTrip(agencyId: string, tripId: string): Promise<A
         paymentStatus: b.paymentStatus,
         amount: b.amount,
         bookedAt: b.createdAt.toISOString(),
+        seats: b.seats ?? 1,
+        companions: (b.travellers ?? []).slice(1).map((t) => ({
+          name: t.name ?? "",
+          age: t.birthDate ? ageOn(t.birthDate) : null,
+        })),
+        ageCheck: (b.ageCheck?.status as AgeCheckStatus | undefined) ?? null,
       };
     }),
     cancelled: bookings

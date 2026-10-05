@@ -11,6 +11,7 @@ import { StatCard, StatGrid } from "@/components/ui/stat-card";
 import { cancelTripAsAgency, setBookingPaid } from "@/lib/agency/actions";
 import { getAgencyTrip } from "@/lib/agency/queries";
 import { getMyAgency, requireRole } from "@/lib/auth/dal";
+import { AGE_CHECK_LABELS } from "@/lib/payments/pricing";
 import { durationLabel, formatDate, formatDateRange, formatPrice } from "@/lib/trips/format";
 
 export const metadata: Metadata = {
@@ -113,8 +114,21 @@ export default async function AgencyTripPage({ params }: PageProps<"/agency/trip
                     <dt className="w-24 shrink-0 text-muted-foreground">Booked</dt>
                     <dd>
                       {formatDate(t.bookedAt)} · {formatPrice(t.amount)}
+                      {t.seats > 1 ? ` for ${t.seats} seats` : ""}
                     </dd>
                   </div>
+                  {t.companions.length > 0 && (
+                    <div className="flex gap-2">
+                      <dt className="w-24 shrink-0 text-muted-foreground">With</dt>
+                      <dd>{t.companions.map((c) => (c.age !== null ? `${c.name}, ${c.age}` : c.name)).join(" · ")}</dd>
+                    </div>
+                  )}
+                  {t.ageCheck && (
+                    <div className="flex gap-2">
+                      <dt className="w-24 shrink-0 text-muted-foreground">Age check</dt>
+                      <dd>{AGE_CHECK_LABELS[t.ageCheck]}</dd>
+                    </div>
+                  )}
                 </dl>
                 {trip.status === "open" && (
                   <form action={setBookingPaid.bind(null, t.bookingId, t.paymentStatus !== "paid")} className="mt-3">

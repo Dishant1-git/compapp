@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { decrypt, SESSION_COOKIE } from "@/lib/auth/token";
+import { bearerToken, decrypt, SESSION_COOKIE } from "@/lib/auth/token";
 
 /**
  * Sends signed-out visitors of private areas to /login, remembering the exact
@@ -11,7 +11,9 @@ import { decrypt, SESSION_COOKIE } from "@/lib/auth/token";
  * Next.js doesn't treat the proxy as a security boundary.
  */
 export async function proxy(request: NextRequest) {
-  const session = await decrypt(request.cookies.get(SESSION_COOKIE)?.value);
+  const session = await decrypt(
+    request.cookies.get(SESSION_COOKIE)?.value ?? bearerToken(request.headers.get("authorization")),
+  );
   if (session?.userId) return NextResponse.next();
 
   const { pathname, search } = request.nextUrl;

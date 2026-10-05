@@ -4,13 +4,19 @@ import { revalidatePath } from "next/cache";
 import { requireRole } from "@/lib/auth/dal";
 import { connectDB } from "@/lib/db/mongoose";
 import { Agency, AGENCY_STATUSES, type AgencyStatus } from "@/lib/db/models/agency";
+import { Booking } from "@/lib/db/models/booking";
 import { CompanionProfile } from "@/lib/db/models/companion-profile";
+import { IdDocument } from "@/lib/db/models/id-document";
 import { Report } from "@/lib/db/models/report";
 import { Trip } from "@/lib/db/models/trip";
 import { User } from "@/lib/db/models/user";
 import { ID_RE, text } from "@/lib/form-utils";
 import { notify } from "@/lib/notifications";
+import { refundPercent } from "@/lib/payments/pricing";
+import { refundSeatFee } from "@/lib/payments/settle";
 import { cancelTripAndBookings } from "@/lib/trips/cancel";
+import { postSystemMessage } from "@/lib/trips/chat";
+import { firstName, formatPrice } from "@/lib/trips/format";
 import type { ActionState } from "@/lib/trips/types";
 
 const requireAdmin = () => requireRole(["admin"], "/admin");
@@ -118,6 +124,111 @@ export async function resolveReport(reportId: string, status: "reviewed" | "dism
     });
   }
   revalidatePath("/admin", "layout");
+}
+
+// ---------------------------------------------------------------------------
+// Age checks (ID uploaded after paying the seat fee)
+// ---------------------------------------------------------------------------
+
+/** Decide a pending age check. The uploaded IDs are deleted once it's decided. */
+async function decideAgeCheck(bookingId: string, adminId: string, status: "verified" | "required" | "rejected", note?: string) {
+  await connectDB();
+  const booking = await Booking.findOneAndUpdate(
+    { _id: bookingId, status: "confirmed", "ageCheck.status": "pending" },
+    {
+      $set: {
+        "ageCheck.status": status,
+        "ageCheck.reviewedAt": new Date(),
+        "ageCheck.reviewedBy": adminId,
+        ...(note ? { "ageCheck.note": note } : {}),
+        ...(status === "rejected" ? { status: "cancelled", cancelledAt: new Date(), cancelledBy: "admin" } : {}),
+      },
+      $unset: { "ageCheck.documents": 1, ...(note ? {} : { "ageCheck.note": 1 }) },
+    },
+  ).populate<{ trip: { _id: unknown; slug: string; title: string; startDate: Date; agency: unknown } | null }>(
+    "trip",
+    "slug title startDate agency",
+  );
+  if (!booking) return null;
+  await IdDocument.deleteMany({ booking: booking._id });
+  revalidatePath("/", "layout");
+  return booking;
+}
+
+export async function approveAgeCheck(bookingId: string) {
+  const admin = await requireAdmin();
+  if (!ID_RE.test(bookingId)) return;
+  const booking = await decideAgeCheck(bookingId, admin.id, "verified");
+  if (booking?.trip) {
+    await notify(booking.user, {
+      title: "Your age is verified",
+      body: `You're all set for ${booking.trip.title}.`,
+      href: `/trips/${booking.trip.slug}`,
+    });
+  }
+}
+
+/** The photo was unreadable or the wrong document: ask for another one, keeping the seat. */
+export async function requestNewAgeDocument(
+  bookingId: string,
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const admin = await requireAdmin();
+  if (!ID_RE.test(bookingId)) return { message: "Invalid request." };
+  const note = text(formData, "note").slice(0, 300);
+  if (note.length < 5) return { errors: { note: ["Tell them what to fix, e.g. \"Date of birth is not readable\"."] } };
+
+  const booking = await decideAgeCheck(bookingId, admin.id, "required", note);
+  if (!booking?.trip) return { message: "This age check was already reviewed." };
+  await notify(booking.user, {
+    title: "Please upload your ID again",
+    body: note,
+    href: `/trips/${booking.trip.slug}/verify-age`,
+  });
+  return { success: true, message: "They've been asked to upload a new document." };
+}
+
+/** The ID shows the age rule isn't met: cancel the booking and refund by time left before departure. */
+export async function rejectAgeCheck(
+  bookingId: string,
+  _prev: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const admin = await requireAdmin();
+  if (!ID_RE.test(bookingId)) return { message: "Invalid request." };
+  const note = text(formData, "note").slice(0, 300);
+  if (note.length < 5) return { errors: { note: ["Add the reason they'll see."] } };
+
+  const booking = await decideAgeCheck(bookingId, admin.id, "rejected", note);
+  if (!booking?.trip) return { message: "This age check was already reviewed." };
+  const trip = booking.trip;
+
+  const refunded = await refundSeatFee(booking._id, refundPercent(trip.startDate), "Age check failed");
+  const [agency, user] = await Promise.all([
+    Agency.findById(trip.agency).select("owner").lean(),
+    User.findById(booking.user).select("name").lean(),
+  ]);
+  await Promise.all([
+    postSystemMessage(String(trip._id), `${firstName(user?.name ?? "A traveller")} left the group.`),
+    notify(booking.user, {
+      title: `Booking cancelled: ${trip.title}`,
+      body: `Your age check failed: ${note} ${
+        refunded ? `${formatPrice(refunded)} of your seat fee is being refunded.` : "The seat fee is not refundable this close to departure."
+      }`,
+      href: `/trips/${trip.slug}`,
+    }),
+    agency &&
+      notify(agency.owner, {
+        title: `Booking cancelled: ${trip.title}`,
+        body: `${user?.name ?? "A traveller"} did not pass the age check.`,
+        href: `/agency/trips/${trip._id}`,
+      }),
+  ]);
+  return {
+    success: true,
+    message: `Booking cancelled. ${refunded ? `${formatPrice(refunded)} refunded.` : "No refund was due."}`,
+  };
 }
 
 /**

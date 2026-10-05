@@ -20,7 +20,9 @@ import {
   todayUTC,
 } from "@/lib/form-utils";
 import { notify } from "@/lib/notifications";
+import { returnTripCredit, takeTripCredit } from "@/lib/payments/credits";
 import { cancelTripAndBookings } from "@/lib/trips/cancel";
+import { seatsTaken } from "@/lib/trips/seats";
 import { postSystemMessage } from "@/lib/trips/chat";
 import type { ActionState } from "@/lib/trips/types";
 
@@ -121,8 +123,24 @@ export async function createTrip(_prev: ActionState, formData: FormData): Promis
   if (hasErrors(errors)) return { errors, values: echo(formData) };
 
   await connectDB();
+  // Publishing uses one trip from the agency's plan.
+  const credit = await takeTripCredit(agency.id);
+  if (!credit) {
+    return {
+      message: "You have no trips left on your plan. Buy a plan in Billing to publish this trip.",
+      errors: { plan: ["none"] },
+      values: echo(formData),
+    };
+  }
+
   const slug = `${slugify(`${data.destination} ${data.title}`)}-${Math.random().toString(36).slice(2, 6)}`;
-  const trip = await Trip.create({ ...data, slug, agency: agency.id });
+  let trip;
+  try {
+    trip = await Trip.create({ ...data, slug, agency: agency.id });
+  } catch (error) {
+    await returnTripCredit(credit);
+    throw error;
+  }
 
   revalidatePath("/", "layout");
   redirect(`/agency/trips/${trip._id}`);
@@ -139,7 +157,7 @@ export async function updateTrip(tripId: string, _prev: ActionState, formData: F
 
   // A trip that has already started can still be edited, but not moved back in time.
   const { errors, data } = parseTripForm(formData, { allowPastStart: trip.startDate <= new Date() });
-  const booked = await Booking.countDocuments({ trip: trip._id, status: "confirmed" });
+  const booked = await seatsTaken(trip._id);
   if (data.maxGroupSize < booked) {
     errors.maxGroupSize = [`${booked} travellers are already booked.`];
   }

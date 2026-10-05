@@ -1,5 +1,7 @@
 // Plain, serializable shapes passed from the data layer to components.
 
+import type { AgeCheckStatus } from "@/lib/payments/pricing";
+
 export type TripSummary = {
   id: string;
   slug: string;
@@ -38,6 +40,8 @@ export type TripDetail = TripSummary & {
   captain: { name: string; bio?: string; phone?: string };
   group: GroupMember[];
   myBookingId: string | null;
+  /** The viewer's own booking: seats held, age-check state and seat fee not yet refunded. */
+  myBooking: { seats: number; ageCheck: AgeCheckStatus | null; feeLeft: number } | null;
   agency: { id: string; name: string; city: string; approved: boolean };
   interested: boolean;
   interestedCount: number;
@@ -50,6 +54,10 @@ export type MyBooking = {
   id: string;
   amount: number;
   paymentStatus: string;
+  seats: number;
+  /** Platform seat fee paid online (0 for bookings made before fees existed). */
+  feePaid: number;
+  ageCheck: AgeCheckStatus | null;
   trip: Pick<TripSummary, "slug" | "title" | "origin" | "destination" | "startDate" | "endDate">;
 };
 

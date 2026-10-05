@@ -22,6 +22,11 @@ export async function encrypt(payload: SessionPayload) {
     .sign(key());
 }
 
+/** The token from an `Authorization: Bearer <token>` header, for API clients such as a mobile app. */
+export function bearerToken(authorization: string | null | undefined) {
+  return authorization?.match(/^Bearer\s+(\S+)$/i)?.[1];
+}
+
 export async function decrypt(token: string | undefined): Promise<SessionPayload | null> {
   if (!token) return null;
   try {

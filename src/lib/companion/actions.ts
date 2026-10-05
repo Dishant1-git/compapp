@@ -2,6 +2,7 @@
 
 import type { UpdateQuery } from "mongoose";
 import { getCurrentUser, type CurrentUser } from "@/lib/auth/dal";
+import { confirmEmailCode, sendEmailCode } from "@/lib/auth/email-verification";
 import { sendOtp } from "@/lib/auth/otp";
 import { linkPhone, phoneOwner } from "@/lib/auth/phone";
 import { CompanionImage } from "@/lib/db/models/companion-image";
@@ -78,14 +79,41 @@ export async function verifyCode(input: { phone: string; code: string }): Promis
   return { ok: true, draft: state.draft, finished: state.active && state.draft.selfie?.status === "verified" };
 }
 
+// ─── Email: the same check, with a code emailed to the account's address ─────
+
+/** Email a 6-digit code to the signed-in account's address, instead of texting one. */
+export async function sendEmailVerificationCode(): Promise<
+  { ok: true; email: string; devCode?: string } | { ok: false; error: string; retryAfter?: number }
+> {
+  const viewer = await getCurrentUser();
+  if (!viewer) return fail(SIGNED_OUT);
+  return sendEmailCode(viewer.id);
+}
+
+/** Check the emailed code and mark the account's email as verified. */
+export async function verifyEmailCode(input: { code: string }): Promise<VerifyResult> {
+  const viewer = await getCurrentUser();
+  if (!viewer) return fail(SIGNED_OUT);
+  const code = String(input?.code ?? "").trim();
+  if (!/^\d{6}$/.test(code)) return fail("Enter the 6-digit code.");
+
+  const confirmed = await confirmEmailCode(viewer.id, code);
+  if (!confirmed.ok) return confirmed;
+  await User.updateOne({ _id: viewer.id }, { $addToSet: { platforms: "companion" } });
+
+  const state = await getCompanionDraft(viewer.id);
+  if (!state) return fail("Something went wrong. Please try again.");
+  return { ok: true, draft: state.draft, finished: state.active && state.draft.selfie?.status === "verified" };
+}
+
 // ─── Profile slides ──────────────────────────────────────────────────────────
 
-/** The signed-in user, only once their phone is verified. */
+/** The signed-in user, only once their phone or email is verified. */
 async function companionUser(): Promise<CurrentUser | null> {
   const viewer = await getCurrentUser();
   if (!viewer) return null;
   const account = await getCompanionAccount(viewer.id);
-  return account?.phoneVerified ? viewer : null;
+  return account?.verified ? viewer : null;
 }
 
 

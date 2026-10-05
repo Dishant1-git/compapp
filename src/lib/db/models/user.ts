@@ -32,6 +32,8 @@ const userSchema = new Schema(
       phone: { type: Boolean, default: false },
       identity: { type: Boolean, default: false },
     },
+    // When the last "verify your email" link was sent, to limit resends.
+    emailVerificationSentAt: { type: Date },
   },
   { timestamps: true },
 );

@@ -7,10 +7,10 @@ import { ButtonLink } from "@/components/ui/button";
 import { Container } from "@/components/ui/container";
 import { requireUser } from "@/lib/auth/dal";
 import { connectDB } from "@/lib/db/mongoose";
-import { Booking } from "@/lib/db/models/booking";
 import { Trip } from "@/lib/db/models/trip";
 import { groupAccess, listMessages } from "@/lib/trips/chat";
 import { formatDateRange } from "@/lib/trips/format";
+import { seatsTaken } from "@/lib/trips/seats";
 
 export const metadata: Metadata = {
   title: "Group chat",
@@ -39,7 +39,7 @@ export default async function GroupPage({ params }: PageProps<"/trips/[slug]/gro
 
   const [messages, members] = await Promise.all([
     listMessages(access, viewer),
-    Booking.countDocuments({ trip: trip._id, status: "confirmed" }),
+    seatsTaken(trip._id),
   ]);
 
   return (

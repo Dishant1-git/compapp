@@ -22,8 +22,15 @@ export type SendResult =
   | { ok: true; devCode?: string }
   | { ok: false; error: string; retryAfter?: number };
 
-/** Create a new 6-digit code for `phone` and text it. Rate-limited per number. */
-export async function sendOtp(phone: string): Promise<SendResult> {
+/**
+ * Create a new 6-digit code for `phone` and text it. Rate-limited per number.
+ * `deliver` sends the code some other way (email): `phone` is then just the key
+ * the code is stored under, e.g. "email:someone@example.com".
+ */
+export async function sendOtp(
+  phone: string,
+  deliver: (code: string) => Promise<SendResult> = (code) => sendOtpSms(phone, code),
+): Promise<SendResult> {
   await connectDB();
   const now = Date.now();
   const existing = await OtpCode.findOne({ phone }).lean();
@@ -57,8 +64,8 @@ export async function sendOtp(phone: string): Promise<SendResult> {
     { upsert: true },
   );
 
-  const sent = await sendOtpSms(phone, code);
-  // Don't make them wait out the resend timer for a text that never went.
+  const sent = await deliver(code);
+  // Don't make them wait out the resend timer for a message that never went.
   if (!sent.ok) await OtpCode.updateOne({ phone }, { $set: { lastSentAt: new Date(0) }, $inc: { sendCount: -1 } });
   return sent;
 }

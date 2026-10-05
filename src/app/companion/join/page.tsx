@@ -16,7 +16,7 @@ export default async function JoinCompanionPage({ searchParams }: PageProps<"/co
   const account = await getCompanionAccount(viewer.id);
 
   let flow: React.ReactNode;
-  if (account?.phoneVerified) {
+  if (account?.verified) {
     const state = await getCompanionDraft(viewer.id);
     if (!state) redirect("/login?next=/companion/join");
     const verified = state.draft.selfie?.status === "verified";
@@ -28,8 +28,8 @@ export default async function JoinCompanionPage({ searchParams }: PageProps<"/co
       />
     );
   } else {
-    // Signed in, but Companion also needs a verified phone number.
-    flow = <JoinFlow initialStep="phone" initialName={account?.name} />;
+    // Signed in, but Companion also needs a verified phone number or email address.
+    flow = <JoinFlow initialStep="phone" initialName={account?.name} email={account?.email ?? undefined} />;
   }
 
   return <div className="mx-auto flex w-full max-w-md flex-1 flex-col px-4 pt-6 pb-6 sm:pt-10">{flow}</div>;

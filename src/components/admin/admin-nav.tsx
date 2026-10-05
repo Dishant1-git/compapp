@@ -11,6 +11,8 @@ const links = [
   { href: "/admin/users", label: "Users", icon: ICONS.users },
   { href: "/admin/trips", label: "Trips", icon: ICONS.trips },
   { href: "/admin/bookings", label: "Bookings", icon: ICONS.bookings },
+  { href: "/admin/payments", label: "Payments", icon: ICONS.payments },
+  { href: "/admin/age-checks", label: "Age checks", icon: ICONS.verify },
   { href: "/admin/reports", label: "Reports", icon: ICONS.reports },
   { href: "/admin/verifications", label: "Verification", icon: ICONS.verify },
 ];

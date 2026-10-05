@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { AdminSidebar, AdminTabs } from "@/components/admin/admin-nav";
 import { AppHeader } from "@/components/layout/app-header";
 import { Container } from "@/components/ui/container";
-import { countPendingSelfies } from "@/lib/admin/queries";
+import { countPendingAgeChecks, countPendingSelfies } from "@/lib/admin/queries";
 import { requireRole } from "@/lib/auth/dal";
 import { connectDB } from "@/lib/db/mongoose";
 import { Agency } from "@/lib/db/models/agency";
@@ -16,16 +16,18 @@ export const metadata: Metadata = {
 export default async function AdminLayout({ children }: LayoutProps<"/admin">) {
   const user = await requireRole(["admin"], "/admin");
   await connectDB();
-  const [pendingAgencies, openReports, pendingSelfies] = await Promise.all([
+  const [pendingAgencies, openReports, pendingSelfies, pendingAgeChecks] = await Promise.all([
     Agency.countDocuments({ status: "pending" }),
     Report.countDocuments({ status: "open" }),
     countPendingSelfies(),
+    countPendingAgeChecks(),
   ]);
   // Things waiting on an admin, shown as counts in the nav.
   const badges = {
     "/admin/agencies": pendingAgencies,
     "/admin/reports": openReports,
     "/admin/verifications": pendingSelfies,
+    "/admin/age-checks": pendingAgeChecks,
   };
 
   return (

@@ -6,6 +6,7 @@ import { Container } from "@/components/ui/container";
 import { StatCard, StatGrid } from "@/components/ui/stat-card";
 import { getAgencyDashboard } from "@/lib/agency/queries";
 import { getMyAgency, requireRole } from "@/lib/auth/dal";
+import { getTripCredits } from "@/lib/payments/credits";
 import { formatDateRange, formatPrice } from "@/lib/trips/format";
 
 export default async function AgencyDashboardPage() {
@@ -19,7 +20,10 @@ export default async function AgencyDashboardPage() {
     );
   }
 
-  const { stats, trips } = await getAgencyDashboard(agency.id);
+  const [{ stats, trips }, { available: credits }] = await Promise.all([
+    getAgencyDashboard(agency.id),
+    getTripCredits(agency.id),
+  ]);
   const now = new Date();
   const upcoming = trips.filter((t) => new Date(t.endDate) >= now && t.status === "open");
   const other = trips.filter((t) => !upcoming.includes(t));
@@ -29,9 +33,18 @@ export default async function AgencyDashboardPage() {
     <Container>
       <PageHeader
         title={agency.name}
-        description="Your trips, travellers and bookings at a glance."
+        description={`Your trips, travellers and bookings at a glance. ${credits} trip${credits === 1 ? "" : "s"} left on your plan.`}
         actions={
-          approved ? <ButtonLink href="/agency/trips/new">New trip</ButtonLink> : <Badge status={agency.status} />
+          approved ? (
+            <>
+              <ButtonLink href="/agency/billing" variant="outline">
+                Billing
+              </ButtonLink>
+              <ButtonLink href="/agency/trips/new">New trip</ButtonLink>
+            </>
+          ) : (
+            <Badge status={agency.status} />
+          )
         }
       />
 

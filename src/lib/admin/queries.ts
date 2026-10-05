@@ -6,10 +6,12 @@ import { connectDB } from "@/lib/db/mongoose";
 import { CompanionProfile } from "@/lib/db/models/companion-profile";
 import { Agency, type AgencyStatus } from "@/lib/db/models/agency";
 import { Booking } from "@/lib/db/models/booking";
+import { Payment } from "@/lib/db/models/payment";
 import { Report } from "@/lib/db/models/report";
 import { TravelPlan } from "@/lib/db/models/travel-plan";
 import { Trip } from "@/lib/db/models/trip";
 import { User } from "@/lib/db/models/user";
+import { ID_DOC_TYPES, ageOn, agencyPlan, refundPercent, type AgeCheckStatus } from "@/lib/payments/pricing";
 import { getProfile, type LeanTrip, type LeanUser } from "@/lib/trips/queries";
 
 const PAGE = 100;
@@ -142,7 +144,7 @@ export async function listAgencies(filters: { status?: string; q?: string }): Pr
       { $lookup: { from: "trips", localField: "trip", foreignField: "_id", as: "t" } },
       { $unwind: "$t" },
       { $match: { "t.agency": { $in: ids } } },
-      { $group: { _id: "$t.agency", count: { $sum: 1 } } },
+      { $group: { _id: "$t.agency", count: { $sum: { $ifNull: ["$seats", 1] } } } },
     ]),
   ]);
 
@@ -314,7 +316,7 @@ export async function listTrips(filters: { q?: string; when?: string }): Promise
     .lean();
   const counts = await Booking.aggregate<{ _id: Types.ObjectId; count: number }>([
     { $match: { trip: { $in: trips.map((t) => t._id) }, status: "confirmed" } },
-    { $group: { _id: "$trip", count: { $sum: 1 } } },
+    { $group: { _id: "$trip", count: { $sum: { $ifNull: ["$seats", 1] } } } },
   ]);
 
   return trips.map((t) => ({
@@ -468,6 +470,131 @@ export async function listSelfieReviews(status: AdminSelfieReview["status"]): Pr
     submittedAt: iso(p.selfie?.submittedAt),
     reviewedAt: iso(p.selfie?.reviewedAt),
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Age checks & payments
+// ---------------------------------------------------------------------------
+
+export type AdminAgeCheck = {
+  bookingId: string;
+  status: AgeCheckStatus;
+  bookingStatus: string;
+  seats: number;
+  user: { id: string; name: string; phone?: string } | null;
+  trip: { slug: string; title: string; startDate: string; minAge: number } | null;
+  travellers: { name: string; birthDate?: string; age: number | null; needsProof: boolean }[];
+  documents: { traveller: number; docType: string; url: string }[];
+  /** Seat fee that would be refunded if this check is rejected now. */
+  refundIfRejected: number;
+  note?: string;
+  submittedAt?: string;
+};
+
+export async function listAgeChecks(status: AgeCheckStatus): Promise<AdminAgeCheck[]> {
+  await connectDB();
+  const bookings = await Booking.find({ "ageCheck.status": status })
+    .sort(status === "pending" ? { "ageCheck.submittedAt": 1 } : { updatedAt: -1 })
+    .limit(PAGE)
+    .populate<{ user: LeanUser | null }>("user", "name phone")
+    .populate<{ trip: LeanTrip | null }>("trip", "slug title startDate minAge")
+    .lean();
+
+  return bookings.map((b) => {
+    const proofFor = b.ageCheck?.proofFor ?? [0];
+    const fee = Math.max(0, (b.fee?.amount ?? 0) - (b.fee?.refunded ?? 0));
+    return {
+      bookingId: String(b._id),
+      status,
+      bookingStatus: b.status,
+      seats: b.seats ?? 1,
+      user: b.user ? { id: String(b.user._id), name: b.user.name, phone: b.user.phone ?? undefined } : null,
+      trip: b.trip
+        ? {
+            slug: b.trip.slug,
+            title: b.trip.title,
+            startDate: b.trip.startDate.toISOString(),
+            minAge: b.trip.minAge ?? 18,
+          }
+        : null,
+      travellers: (b.travellers ?? []).map((t, i) => ({
+        name: t.name ?? "",
+        birthDate: iso(t.birthDate),
+        age: t.birthDate ? ageOn(t.birthDate) : null,
+        needsProof: proofFor.includes(i),
+      })),
+      documents: (b.ageCheck?.documents ?? []).map((d) => ({
+        traveller: d.traveller ?? 0,
+        docType: ID_DOC_TYPES.find((t) => t.id === d.docType)?.label ?? d.docType ?? "ID",
+        url: `/api/trips/documents/${d.image}`,
+      })),
+      refundIfRejected: b.trip ? Math.round((fee * refundPercent(b.trip.startDate)) / 100) : 0,
+      note: b.ageCheck?.note ?? undefined,
+      submittedAt: iso(b.ageCheck?.submittedAt),
+    };
+  });
+}
+
+export async function countPendingAgeChecks() {
+  await connectDB();
+  return Booking.countDocuments({ "ageCheck.status": "pending" });
+}
+
+export type AdminPaymentRow = {
+  id: string;
+  purpose: string;
+  what: string;
+  amount: number;
+  refundedAmount: number;
+  failedRefund: number;
+  status: string;
+  gateway: string;
+  orderId: string;
+  paymentId?: string;
+  problem?: string;
+  payer: { id: string; name: string; email: string } | null;
+  createdAt: string;
+};
+
+/** Money taken through the gateway, newest first. Unpaid checkout attempts are left out. */
+export async function listPayments(filters: { purpose?: string }) {
+  await connectDB();
+  const query: Record<string, unknown> = { status: { $ne: "created" } };
+  if (filters.purpose) query.purpose = filters.purpose;
+
+  const [payments, totals] = await Promise.all([
+    Payment.find(query)
+      .sort({ createdAt: -1 })
+      .limit(PAGE)
+      .populate<{ user: LeanUser | null }>("user", "name email")
+      .populate<{ trip: LeanTrip | null }>("trip", "title")
+      .populate<{ agency: { name: string } | null }>("agency", "name")
+      .lean(),
+    Payment.aggregate<{ _id: null; paid: number; refunded: number }>([
+      { $match: query },
+      { $group: { _id: null, paid: { $sum: "$amount" }, refunded: { $sum: "$refundedAmount" } } },
+    ]),
+  ]);
+
+  const rows: AdminPaymentRow[] = payments.map((p) => ({
+    id: String(p._id),
+    purpose: p.purpose,
+    what:
+      p.purpose === "agency_plan"
+        ? `${agencyPlan(p.plan ?? "")?.name ?? "Plan"} plan · ${p.agency?.name ?? "agency"}`
+        : `${p.draft?.seats ?? 1} seat${(p.draft?.seats ?? 1) === 1 ? "" : "s"} · ${p.trip?.title ?? "trip"}`,
+    amount: p.amount,
+    refundedAmount: p.refundedAmount ?? 0,
+    failedRefund: (p.refunds ?? []).filter((r) => r.status === "failed").reduce((sum, r) => sum + (r.amount ?? 0), 0),
+    status: p.status,
+    gateway: p.gateway,
+    orderId: p.orderId,
+    paymentId: p.paymentId ?? undefined,
+    problem: p.problem ?? undefined,
+    payer: p.user ? { id: String(p.user._id), name: p.user.name, email: p.user.email ?? "" } : null,
+    createdAt: p.createdAt.toISOString(),
+  }));
+  return { rows, paid: totals[0]?.paid ?? 0, refunded: totals[0]?.refunded ?? 0 };
 }
 
 export async function countPendingSelfies() {

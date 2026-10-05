@@ -7,17 +7,21 @@ import { imageUrl, type CompanionDraft, type SelfieStatus } from "./types";
 export type CompanionAccount = {
   name: string;
   phone: string | null;
-  phoneVerified: boolean;
+  /** The account's email, if it has one: a code can be sent there instead of a text. */
+  email: string | null;
+  /** Companion needs a verified phone number or a verified email address. */
+  verified: boolean;
 };
 
 export async function getCompanionAccount(userId: string): Promise<CompanionAccount | null> {
   await connectDB();
-  const user = await User.findById(userId).select("name phone verification").lean();
+  const user = await User.findById(userId).select("name phone email verification").lean();
   if (!user) return null;
   return {
     name: user.name,
     phone: user.phone ?? null,
-    phoneVerified: !!user.verification?.phone,
+    email: user.email ?? null,
+    verified: !!user.verification?.phone || (!!user.email && !!user.verification?.email),
   };
 }
 

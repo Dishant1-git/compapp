@@ -11,6 +11,7 @@ export const metadata: Metadata = {
 const links: NavLink[] = [
   { href: "/agency", label: "Dashboard", icon: ICONS.dashboard, exact: true },
   { href: "/agency/trips/new", label: "New trip", icon: ICONS.plus },
+  { href: "/agency/billing", label: "Billing", icon: ICONS.payments },
   { href: "/agency/profile", label: "Profile", icon: ICONS.profile },
   { href: "/trips", label: "Browse", icon: ICONS.explore },
 ];

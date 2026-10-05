@@ -12,6 +12,7 @@ import { ButtonLink } from "@/components/ui/button";
 import { TagList } from "@/components/trips/tag-list";
 import { Container } from "@/components/ui/container";
 import { requireUser } from "@/lib/auth/dal";
+import { refundPercent } from "@/lib/payments/pricing";
 import { durationLabel, formatDateRange } from "@/lib/trips/format";
 import { getProfile, getTrip } from "@/lib/trips/queries";
 
@@ -84,13 +85,14 @@ export default async function TripPage({ params }: PageProps<"/trips/[slug]">) {
         <aside className="lg:col-start-2 lg:row-start-1">
           <div className="space-y-6 lg:sticky lg:top-24">
             <BookingPanel
-              tripId={trip.id}
               slug={trip.slug}
               price={trip.price}
               maxGroupSize={trip.maxGroupSize}
               bookedCount={trip.bookedCount}
               minAge={trip.minAge}
               myBookingId={trip.myBookingId}
+              myBooking={trip.myBooking}
+              cancelRefund={Math.round(((trip.myBooking?.feeLeft ?? 0) * refundPercent(trip.startDate)) / 100)}
               bookable={trip.status === "open" && !started}
               closedReason={closedReason}
               signedIn={!!user}

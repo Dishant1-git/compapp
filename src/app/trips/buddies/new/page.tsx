@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { PageHeader } from "@/components/trips/page-header";
 import { PlanForm } from "@/components/trips/plan-form";
 import { Container } from "@/components/ui/container";
-import { requireUser } from "@/lib/auth/dal";
+import { requireVerified } from "@/lib/auth/dal";
 import { getProfile } from "@/lib/trips/queries";
 
 export const metadata: Metadata = {
@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 };
 
 export default async function NewPlanPage() {
-  const user = await requireUser("/trips/buddies/new");
+  const user = await requireVerified("/trips/buddies/new");
   const profile = await getProfile(user.id);
 
   return (

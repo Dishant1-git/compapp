@@ -9,7 +9,7 @@ For a deep dive into how everything works, see [docs/ARCHITECTURE.md](docs/ARCHI
 
 ## Getting started
 
-Requires Node 20+ and MongoDB (local or Atlas).
+Requires Node 22.13+ and MongoDB (local or Atlas).
 
 ```bash
 npm install
@@ -32,6 +32,43 @@ Demo logins (password `password123`). Each role lands on its own home page after
 
 **Your real admin account:** register normally at `/register`, then run
 `npm run make-admin -- you@example.com`. After that, admins can promote others from `/admin/users`.
+
+## Deploying
+
+The app is one Node server (`next start`). Host it somewhere that runs a long-lived Node
+process with the full `node_modules` folder: a VPS, Render, Railway, Fly.io or similar.
+Serverless hosts are a poor fit, because Companion's photo checks load TensorFlow models
+from `node_modules` at runtime and keep them in memory. Give the server at least 1 GB of RAM.
+
+```bash
+npm ci
+npm run build
+npm start            # listens on PORT (default 3000)
+```
+
+Requires Node 22.13 or newer. Put HTTPS in front of it (the host's own, or nginx/Caddy):
+the login cookie is only sent over HTTPS in production. If you use nginx, allow uploads of
+5 MB (`client_max_body_size 5m;`).
+
+**Settings** (set them in the host's environment; `.env.example` describes each one):
+
+| Setting | Needed for |
+|---|---|
+| `MONGODB_URI`, `SESSION_SECRET` | Required. The server refuses to start without them. Use a hosted database such as MongoDB Atlas, and a new secret for production. |
+| `APP_URL` | Links in emails, e.g. `https://example.com`. |
+| `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | Payments. Live keys (`rzp_live_…`) to collect real money. |
+| `RAZORPAY_WEBHOOK_SECRET` | Confirming payments when the payer closes the tab. In the Razorpay dashboard add a webhook to `https://<domain>/api/payments/razorpay/webhook` for `payment.captured`. |
+| `BREVO_API_KEY`, `BREVO_SENDER_EMAIL` | Verification emails. Authorise the server's IP in Brevo (Security > Authorised IPs). |
+| One SMS provider (`TWILIO_…`, `MSG91_…` or `FAST2SMS_API_KEY`) | Phone sign-in and Companion sign-up. |
+
+On start-up the server logs a `[config]` warning for each optional setting that is missing.
+
+**After the first deploy**
+
+1. Don't run `npm run seed` against the production database: it creates demo accounts with a known password.
+2. Register your own account on the site, then make it an admin: `npm run make-admin -- you@example.com` (run with the production `MONGODB_URI`).
+3. Set `support.email` in `src/lib/site-config.ts`; it appears on `/terms`, `/privacy` and `/refunds`.
+4. Point your host's health check at `/api/health` (200 when the database is reachable).
 
 ## Roles
 
@@ -60,11 +97,34 @@ agencies are hidden from travellers. Suspended users can't sign in. Everyone get
 | `/agency` | Agency dashboard: stats, upcoming and past trips. |
 | `/agency/trips/new`, `/agency/trips/[id]`, `/agency/trips/[id]/edit` | Create a trip; manage travellers, payments and interested people; edit; cancel. |
 | `/agency/profile` | Agency details. Changing the registration number sends the agency back for review. |
-| `/admin` | Overview, then Agencies, Users, Trips, Bookings and Reports. |
+| `/agency/billing` | Buy trips to publish: single trip, monthly or annual plan. Shows trips left and past plans. |
+| `/trips/[slug]/book` | Reserve a seat: solo or a group of 3+, trip rules and consent, then pay the seat fee. |
+| `/trips/[slug]/verify-age` | After paying: upload a photo ID so an admin can check ages. |
+| `/admin` | Overview, then Agencies, Users, Trips, Bookings, Payments, Age checks and Reports. |
 
-Rules enforced on the server: bookings need a phone number, birth year and emergency
-contact; minimum age per trip; one seat per person; no overbooking; no cancelling
+Rules enforced on the server: bookings need a phone number and emergency contact;
+minimum age per trip; one booking per person; no overbooking; no cancelling
 after departure; contact details only after a buddy request is accepted.
+
+### Payments (Razorpay)
+
+Prices, the refund schedule and the consent rules live in `src/lib/payments/pricing.ts`.
+
+- **Agencies** pay to publish: ₹1,500 for one trip, ₹12,500 for 10 trips in 30 days, or
+  ₹1,42,500 for 150 trips in 12 months. Each published trip uses one. One-time payments, no auto-renewal.
+- **Travellers** pay a seat fee to reserve: ₹299, or ₹249 each for a group of 3 or more.
+  The trip price itself is still paid to the agency, which marks it paid.
+- **Age check**: after paying, the traveller uploads a photo ID (Aadhaar or another
+  government ID). Solo travellers must meet the trip's minimum age (18+); a group needs
+  at least 2 people aged 18+. An admin approves, asks for a new photo, or fails the check,
+  which cancels the booking. ID photos are deleted once decided.
+- **Refunds** of the seat fee depend on time left before departure: 100% at 7+ days,
+  50% at 3 to 6 days, nothing under 3 days. A trip cancelled by the agency or an admin
+  is refunded in full.
+
+Set `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` and `RAZORPAY_WEBHOOK_SECRET` in `.env.local`
+(see `.env.example`). Without keys, development simulates payments and no money moves;
+production refuses to take payments.
 
 **Matching**: overlap between personality tags (Dice coefficient). A trip's score is
 40% the trip's vibe plus 60% the average match with people already booked
@@ -75,9 +135,10 @@ cancellations and upheld reports (`src/lib/trips/trust.ts`).
 
 ### Not built yet
 
-- Online payments: bookings start `unpaid` and agencies mark them paid by hand. Add Razorpay or Cashfree in `bookTrip`.
+- Paying the trip price online: only the seat fee and agency plans go through Razorpay. The trip price is paid to the agency, which marks the booking paid by hand.
+- GST invoices for plans and seat fees.
 - Real-time chat: the group chat polls every 4 seconds. Swap in WebSockets or Pusher when needed.
-- Email and ID verification (the `verification` flags exist on the user model). Phone OTP is built.
+- Requiring a verified email: the link is emailed through Brevo on sign-up and from the profile pages (`src/lib/auth/email-verification.ts`), and raises the trust score, but nothing is blocked for unverified accounts yet.
 - Email or push delivery of notifications (in-app only for now)
 
 ## Signing in

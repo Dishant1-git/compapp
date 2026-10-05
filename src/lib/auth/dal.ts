@@ -1,11 +1,12 @@
 import "server-only";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
 import { connectDB } from "@/lib/db/mongoose";
 import { Agency, type AgencyStatus } from "@/lib/db/models/agency";
 import { User } from "@/lib/db/models/user";
 import { decrypt, SESSION_COOKIE } from "./session";
+import { bearerToken } from "./token";
 
 export type Role = "user" | "agency" | "admin";
 
@@ -17,9 +18,15 @@ export type CurrentUser = {
   personality: string[];
 };
 
-/** The signed-in user, or null. Suspended accounts count as signed out. Memoized per request. */
+/**
+ * The signed-in user, or null. Suspended accounts count as signed out. Memoized per request.
+ * Browsers send the session cookie; API clients send the same token as
+ * `Authorization: Bearer <token>` (see /api/auth/login).
+ */
 export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
-  const session = await decrypt((await cookies()).get(SESSION_COOKIE)?.value);
+  const token =
+    (await cookies()).get(SESSION_COOKIE)?.value ?? bearerToken((await headers()).get("authorization"));
+  const session = await decrypt(token);
   if (!session?.userId) return null;
 
   await connectDB();
@@ -41,6 +48,23 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
 export async function requireUser(next?: string): Promise<CurrentUser> {
   const user = await getCurrentUser();
   if (!user) redirect(next ? `/login?next=${encodeURIComponent(next)}` : "/login");
+  return user;
+}
+
+/**
+ * Has this account proved it's a real person: a verified phone number or a
+ * verified email address? Needed to book trips and to use Companion.
+ */
+export const isVerified = cache(async (userId: string) => {
+  await connectDB();
+  const user = await User.findById(userId).select("email verification").lean();
+  return !!user && (!!user.verification?.phone || (!!user.email && !!user.verification?.email));
+});
+
+/** For pages only verified accounts can use: sends the others to verify, then back to `next`. */
+export async function requireVerified(next: string): Promise<CurrentUser> {
+  const user = await requireUser(next);
+  if (!(await isVerified(user.id))) redirect(`/trips/verify?next=${encodeURIComponent(next)}`);
   return user;
 }
 

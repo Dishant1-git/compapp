@@ -53,7 +53,7 @@ export function TrustScoreCard({
         ))}
       </div>
       <p className="mt-3 text-xs text-muted-foreground">
-        OTP and ID verification are coming soon and will raise your score.
+        Verifying your email and phone raises your score.
       </p>
     </section>
   );

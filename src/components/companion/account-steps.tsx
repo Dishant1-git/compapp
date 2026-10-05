@@ -2,23 +2,62 @@
 
 import { useEffect, useRef, useState } from "react";
 import { FieldError, Input, Label, Select } from "@/components/ui/input";
-import { sendCode, verifyCode, type VerifyResult } from "@/lib/companion/actions";
+import {
+  sendCode,
+  sendEmailVerificationCode,
+  verifyCode,
+  verifyEmailCode,
+  type VerifyResult,
+} from "@/lib/companion/actions";
 import { COUNTRY_CODES, maskPhone } from "@/lib/phone";
 import { StepForm } from "./step-form";
 
-export type SentCode = { phone: string; devCode?: string; sentAt: number };
+/** A code that was sent: by text to `phone`, or by email when `email` is set. */
+export type SentCode = { phone: string; email?: string; devCode?: string; sentAt: number };
 
 const RESEND_SECONDS = 30;
 
-export function PhoneStep({ onSent }: { onSent: (sent: SentCode) => void }) {
+/** "di•••••@gmail.com" */
+function maskEmail(email: string) {
+  const [name, domain] = email.split("@");
+  return `${name.slice(0, 2)}${"•".repeat(Math.max(3, name.length - 2))}@${domain}`;
+}
+
+export function PhoneStep({ email, onSent }: { email?: string; onSent: (sent: SentCode) => void }) {
   const [countryCode, setCountryCode] = useState<string>(COUNTRY_CODES[0].code);
   const [number, setNumber] = useState("");
   const sent = useRef<SentCode>(null);
+  const [emailing, setEmailing] = useState(false);
+  const [emailError, setEmailError] = useState<string>();
+
+  async function emailInstead() {
+    setEmailing(true);
+    setEmailError(undefined);
+    const result = await sendEmailVerificationCode().catch(() => null);
+    setEmailing(false);
+    if (result?.ok) onSent({ phone: "", email: result.email, devCode: result.devCode, sentAt: Date.now() });
+    else setEmailError(result?.error ?? "Couldn't send the email. Try again.");
+  }
 
   return (
     <StepForm
       title="What's your mobile number?"
-      description="Companion needs a verified number. We'll text you a 6-digit code. Your number is never shown on your profile."
+      description={`Companion needs a verified number${email ? " or email" : ""}. We'll text you a 6-digit code. Your number is never shown on your profile.`}
+      footer={
+        email && (
+          <div className="mt-4 text-center text-sm text-muted-foreground">
+            <button
+              type="button"
+              onClick={emailInstead}
+              disabled={emailing}
+              className="font-medium text-foreground underline underline-offset-4 disabled:opacity-50"
+            >
+              {emailing ? "Sending…" : `Email a code to ${maskEmail(email)} instead`}
+            </button>
+            <FieldError id="email-code-error" messages={emailError ? [emailError] : undefined} />
+          </div>
+        )
+      }
       pendingLabel="Sending code…"
       submitLabel="Send code"
       canSubmit={number.replace(/\D/g, "").length >= 7}
@@ -85,11 +124,13 @@ export function OtpStep({
   async function resend() {
     setResending(true);
     setResendError(undefined);
-    const result = await sendCode({ countryCode: "", number: sent.phone }).catch(() => null);
+    const result = await (
+      sent.email ? sendEmailVerificationCode() : sendCode({ countryCode: "", number: sent.phone })
+    ).catch(() => null);
     setResending(false);
     if (result?.ok) {
       setCode("");
-      onResent({ phone: result.phone, devCode: result.devCode, sentAt: Date.now() });
+      onResent({ ...sent, devCode: result.devCode, sentAt: Date.now() });
     } else {
       setResendError(result?.error ?? "Couldn't send a new code. Try again.");
     }
@@ -100,9 +141,13 @@ export function OtpStep({
       title="Enter your code"
       description={
         <>
-          Sent to <span className="font-medium text-foreground">{maskPhone(sent.phone)}</span>.{" "}
+          Sent to{" "}
+          <span className="font-medium text-foreground">
+            {sent.email ? maskEmail(sent.email) : maskPhone(sent.phone)}
+          </span>
+          .{sent.email ? " Check your spam folder if you don't see it. " : " "}
           <button type="button" onClick={onChangeNumber} className="font-medium text-foreground underline underline-offset-4">
-            Change number
+            {sent.email ? "Use my mobile number" : "Change number"}
           </button>
         </>
       }
@@ -110,7 +155,7 @@ export function OtpStep({
       pendingLabel="Verifying…"
       canSubmit={code.length === 6}
       onSubmit={async () => {
-        const result = await verifyCode({ phone: sent.phone, code });
+        const result = sent.email ? await verifyEmailCode({ code }) : await verifyCode({ phone: sent.phone, code });
         if (result.ok) verified.current = result;
         return result.ok ? { ok: true } : result;
       }}
@@ -135,8 +180,8 @@ export function OtpStep({
     >
       {sent.devCode && (
         <p className="rounded-lg border border-dashed px-4 py-3 text-sm">
-          <span className="font-medium">Development mode:</span> no SMS provider is set up, so
-          here&apos;s your code: <span className="font-mono font-semibold tracking-widest">{sent.devCode}</span>
+          <span className="font-medium">Development mode:</span> no {sent.email ? "email" : "SMS"} provider is
+          set up, so here&apos;s your code: <span className="font-mono font-semibold tracking-widest">{sent.devCode}</span>
         </p>
       )}
       <div>

@@ -18,6 +18,8 @@ export const siteConfig = {
   name: "CompApp",
   description:
     "Plan trips with like-minded strangers and find companions — one account, two platforms.",
+  // Shown on the terms, privacy and refund pages. Set the address people should write to.
+  support: { email: "" },
   nav: [
     { label: "Stranger Trips", href: "/trips" },
     { label: "Companion", href: "/companion" },

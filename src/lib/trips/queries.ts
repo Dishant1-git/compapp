@@ -10,6 +10,7 @@ import { TravelPlan } from "@/lib/db/models/travel-plan";
 import { Trip, type TripDoc } from "@/lib/db/models/trip";
 import { TripInterest } from "@/lib/db/models/trip-interest";
 import { User, type UserDoc } from "@/lib/db/models/user";
+import type { AgeCheckStatus } from "@/lib/payments/pricing";
 import { ageFromBirthYear, firstName } from "./format";
 import { compatibility, tripCompatibility } from "./matching";
 import { computeTrust, type TrustScore } from "./trust";
@@ -55,12 +56,13 @@ async function approvedAgencyIds() {
   return agencies.map((a) => a._id);
 }
 
-type Member = { userId: string; personality: string[] };
+/** `seats` is more than 1 when they booked for a group. */
+type Member = { userId: string; personality: string[]; seats?: number };
 
 /** Personalities of everyone holding a confirmed seat, per trip. */
 export async function groupsFor(tripIds: Types.ObjectId[]) {
   const bookings = await Booking.find({ trip: { $in: tripIds }, status: "confirmed" })
-    .select("trip user")
+    .select("trip user seats")
     .populate<{ user: LeanUser | null }>("user", "personality")
     .lean();
 
@@ -69,7 +71,7 @@ export async function groupsFor(tripIds: Types.ObjectId[]) {
     if (!b.user) continue;
     const key = String(b.trip);
     const list = groups.get(key) ?? [];
-    list.push({ userId: String(b.user._id), personality: b.user.personality ?? [] });
+    list.push({ userId: String(b.user._id), personality: b.user.personality ?? [], seats: b.seats ?? 1 });
     groups.set(key, list);
   }
   return groups;
@@ -88,7 +90,7 @@ export function toSummary(trip: LeanTrip, group: Member[], viewer: CurrentUser |
     endDate: trip.endDate.toISOString(),
     price: trip.price,
     maxGroupSize: trip.maxGroupSize,
-    bookedCount: group.length,
+    bookedCount: group.reduce((sum, m) => sum + (m.seats ?? 1), 0),
     vibes: trip.vibes ?? [],
     compatibility: viewer ? tripCompatibility(viewer.personality, trip.vibes ?? [], others) : null,
   };
@@ -163,13 +165,23 @@ export async function getTrip(slug: string, viewer: CurrentUser | null): Promise
     .lean();
 
   let myBookingId: string | null = null;
+  let myBooking: TripDetail["myBooking"] = null;
   const group: GroupMember[] = [];
+  const members: Member[] = [];
   for (const b of bookings) {
     if (!b.user) continue;
     const userId = String(b.user._id);
     const isYou = userId === viewer?.id;
-    if (isYou) myBookingId = String(b._id);
+    if (isYou) {
+      myBookingId = String(b._id);
+      myBooking = {
+        seats: b.seats ?? 1,
+        ageCheck: (b.ageCheck?.status as AgeCheckStatus | undefined) ?? null,
+        feeLeft: Math.max(0, (b.fee?.amount ?? 0) - (b.fee?.refunded ?? 0)),
+      };
+    }
     const personality = b.user.personality ?? [];
+    members.push({ userId, personality, seats: b.seats ?? 1 });
     group.push({
       userId,
       firstName: firstName(b.user.name),
@@ -190,11 +202,7 @@ export async function getTrip(slug: string, viewer: CurrentUser | null): Promise
     viewer ? TripInterest.exists({ trip: trip._id, user: viewer.id }) : Promise.resolve(null),
   ]);
 
-  const summary = toSummary(
-    trip,
-    group.map((m) => ({ userId: m.userId, personality: m.personality })),
-    viewer,
-  );
+  const summary = toSummary(trip, members, viewer);
 
   return {
     ...summary,
@@ -217,6 +225,7 @@ export async function getTrip(slug: string, viewer: CurrentUser | null): Promise
     },
     group,
     myBookingId,
+    myBooking,
     agency: { id: String(agency._id), name: agency.name, city: agency.city, approved },
     interested: !!interested,
     interestedCount,
@@ -237,6 +246,9 @@ export async function getMyBookings(userId: string): Promise<MyBooking[]> {
       id: String(b._id),
       amount: b.amount,
       paymentStatus: b.paymentStatus,
+      seats: b.seats ?? 1,
+      feePaid: b.fee?.amount ?? 0,
+      ageCheck: (b.ageCheck?.status as AgeCheckStatus | undefined) ?? null,
       trip: {
         slug: b.trip!.slug,
         title: b.trip!.title,
@@ -247,6 +259,40 @@ export async function getMyBookings(userId: string): Promise<MyBooking[]> {
       },
     }))
     .sort((a, b) => a.trip.startDate.localeCompare(b.trip.startDate));
+}
+
+export type MyAgeCheck = {
+  bookingId: string;
+  tripTitle: string;
+  status: AgeCheckStatus;
+  /** Why an admin asked for a new document. */
+  note?: string;
+  seats: number;
+  feePaid: number;
+  /** Whose ID has to be uploaded. */
+  proofs: { traveller: number; name: string }[];
+};
+
+/** The viewer's booking on a trip, as the age-check page needs it. Null if there's nothing to check. */
+export async function getMyAgeCheck(slug: string, userId: string): Promise<MyAgeCheck | null> {
+  await connectDB();
+  const trip = await Trip.findOne({ slug }).select("title").lean();
+  if (!trip) return null;
+  const booking = await Booking.findOne({ trip: trip._id, user: userId, status: "confirmed" }).lean();
+  if (!booking?.ageCheck?.status) return null;
+
+  return {
+    bookingId: String(booking._id),
+    tripTitle: trip.title,
+    status: booking.ageCheck.status as AgeCheckStatus,
+    note: booking.ageCheck.note ?? undefined,
+    seats: booking.seats ?? 1,
+    feePaid: booking.fee?.amount ?? 0,
+    proofs: (booking.ageCheck.proofFor ?? [0]).map((traveller) => ({
+      traveller,
+      name: booking.travellers?.[traveller]?.name ?? "Traveller",
+    })),
+  };
 }
 
 // ---------------------------------------------------------------------------

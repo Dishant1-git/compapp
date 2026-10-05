@@ -53,7 +53,7 @@ const PROFILE_STEPS: Partial<Record<JoinStep, (props: StepProps) => React.ReactN
 
 /**
  * Companion onboarding for a signed-in account, one question per slide:
- * phone → code (only if the number isn't verified yet) → birthday → look → location → gender → orientation →
+ * phone or email → code (only if neither is verified yet) → birthday → look → location → gender → orientation →
  * interests → habits → photos → live selfie → preview.
  * Each slide saves as you go, so leaving and coming back resumes where you were.
  */
@@ -61,10 +61,13 @@ export function JoinFlow({
   initialStep,
   initialDraft,
   initialName = "",
+  email,
 }: {
   initialStep: JoinStep;
   initialDraft?: CompanionDraft;
   initialName?: string;
+  /** The account's email, if it has one: offered as another way to verify. */
+  email?: string;
 }) {
   const router = useRouter();
   const [step, setStep] = useState(initialStep);
@@ -135,6 +138,7 @@ export function JoinFlow({
       >
         {step === "phone" && (
           <PhoneStep
+            email={email}
             onSent={(s) => {
               setSent(s);
               next();

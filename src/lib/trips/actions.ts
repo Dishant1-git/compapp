@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getCurrentUser, requireUser, safeNext } from "@/lib/auth/dal";
+import { getCurrentUser, requireUser, requireVerified, safeNext } from "@/lib/auth/dal";
 import { connectDB } from "@/lib/db/mongoose";
 import { Booking } from "@/lib/db/models/booking";
 import { BuddyRequest } from "@/lib/db/models/buddy-request";
@@ -13,75 +13,98 @@ import { User } from "@/lib/db/models/user";
 import { Agency } from "@/lib/db/models/agency";
 import { Message } from "@/lib/db/models/message";
 import { TripInterest } from "@/lib/db/models/trip-interest";
+import { IdDocument } from "@/lib/db/models/id-document";
 import { ID_RE, PHONE_RE, dateInput, echo, hasErrors, personalities, text, todayUTC } from "@/lib/form-utils";
 import { notify } from "@/lib/notifications";
+import { ID_DOC_TYPES, MAX_ID_DOC_BYTES, refundPercent } from "@/lib/payments/pricing";
+import { refundSeatFee } from "@/lib/payments/settle";
 import { groupAccess, postSystemMessage } from "./chat";
 import { GENDERS, REPORT_REASONS, type ReportReason } from "./constants";
-import { firstName, formatDateRange } from "./format";
+import { firstName, formatDateRange, formatPrice } from "./format";
 import type { ActionState } from "./types";
 
 // ---------------------------------------------------------------------------
 // Bookings
 // ---------------------------------------------------------------------------
 
-export async function bookTrip(tripId: string): Promise<ActionState> {
-  const viewer = await getCurrentUser();
-  if (!viewer) redirect("/login?next=/trips");
-  if (!ID_RE.test(tripId)) return { message: "Trip not found." };
-  if (viewer.role !== "user") return { message: "Agency and admin accounts can't book trips." };
+// Seats are booked by paying the seat fee: see startSeatBooking in src/lib/payments/actions.ts.
 
-  await connectDB();
-  const [trip, user] = await Promise.all([
-    Trip.findById(tripId),
-    User.findById(viewer.id).select("name phone birthYear emergencyContact"),
-  ]);
-  if (!trip || !user) return { message: "Trip not found." };
-  const agency = await Agency.findById(trip.agency).select("owner status").lean();
-  if (!agency || agency.status !== "approved") return { message: "This trip is not available." };
-  if (trip.status !== "open") return { message: "This trip is no longer taking bookings." };
-  if (trip.startDate <= new Date()) return { message: "This trip has already started." };
-
-  // Safety first: everyone on a trip must be reachable and have an emergency contact.
-  if (!user.phone || !user.birthYear || !user.emergencyContact?.name || !user.emergencyContact?.phone) {
-    return {
-      message: "Add your phone number, birth year and an emergency contact before booking.",
-      errors: { profile: ["incomplete"] },
-    };
-  }
-  const age = new Date().getFullYear() - user.birthYear;
-  if (age < (trip.minAge ?? 18)) {
-    return { message: `Travellers on this trip must be at least ${trip.minAge ?? 18}.` };
-  }
-
-  if (await Booking.exists({ trip: trip._id, user: viewer.id, status: "confirmed" })) {
-    return { message: "You already have a seat on this trip." };
-  }
-  if ((await Booking.countDocuments({ trip: trip._id, status: "confirmed" })) >= trip.maxGroupSize) {
-    return { message: "Sorry, this trip is full." };
-  }
-
-  const booking = await Booking.create({ trip: trip._id, user: viewer.id, amount: trip.price });
-
-  // Guard against two people taking the last seat at the same time.
-  const seatsTaken = await Booking.countDocuments({ trip: trip._id, status: "confirmed" });
-  if (seatsTaken > trip.maxGroupSize) {
-    await Booking.deleteOne({ _id: booking._id });
-    return { message: "Sorry, the last seat was just taken." };
-  }
-
-  await Promise.all([
-    postSystemMessage(trip._id, `${firstName(user.name)} joined the group.`),
-    notify(agency.owner, {
-      title: `New booking: ${trip.title}`,
-      body: `${user.name} booked a seat (${seatsTaken}/${trip.maxGroupSize}).`,
-      href: `/agency/trips/${trip._id}`,
-    }),
-  ]);
-
-  revalidatePath("/", "layout");
-  return { success: true, message: "You're in! You've been added to the trip's group chat." };
+/** Read an uploaded ID photo and check its bytes really are a JPEG, PNG or WebP. */
+async function readIdImage(file: FormDataEntryValue | null) {
+  if (!(file instanceof File) || file.size === 0) return null;
+  if (file.size > MAX_ID_DOC_BYTES) return null;
+  const data = Buffer.from(await file.arrayBuffer());
+  const head = data.subarray(0, 12);
+  const contentType =
+    head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff
+      ? "image/jpeg"
+      : head.subarray(0, 4).toString("hex") === "89504e47"
+        ? "image/png"
+        : head.subarray(0, 4).toString() === "RIFF" && head.subarray(8, 12).toString() === "WEBP"
+          ? "image/webp"
+          : null;
+  return contentType ? { data, contentType } : null;
 }
 
+/**
+ * Upload the IDs that prove the travellers' ages, after paying. The form sends
+ * `doc-<n>` (a photo) and `type-<n>` for each traveller whose ID is needed.
+ */
+export async function submitAgeDocuments(bookingId: string, formData: FormData): Promise<ActionState> {
+  const viewer = await requireUser();
+  if (!ID_RE.test(bookingId)) return { message: "Booking not found." };
+
+  await connectDB();
+  const booking = await Booking.findOne({ _id: bookingId, user: viewer.id, status: "confirmed" })
+    .select("trip ageCheck travellers")
+    .populate<{ trip: { title: string } | null }>("trip", "title");
+  if (!booking?.ageCheck?.status) return { message: "Booking not found." };
+  if (booking.ageCheck.status !== "required") return { message: "Your ID has already been sent." };
+
+  const uploads = [];
+  for (const traveller of booking.ageCheck.proofFor ?? [0]) {
+    const docType = text(formData, `type-${traveller}`);
+    if (!ID_DOC_TYPES.some((t) => t.id === docType)) return { message: "Choose the type of each document." };
+    const image = await readIdImage(formData.get(`doc-${traveller}`));
+    if (!image) return { message: "Add a clear JPEG, PNG or WebP photo of each ID (under 2 MB)." };
+    uploads.push({ traveller, docType, image });
+  }
+
+  const saved = await IdDocument.insertMany(
+    uploads.map((u) => ({
+      owner: viewer.id,
+      booking: booking._id,
+      contentType: u.image.contentType,
+      bytes: u.image.data.length,
+      data: u.image.data,
+    })),
+  );
+  const updated = await Booking.updateOne(
+    { _id: booking._id, "ageCheck.status": "required" },
+    {
+      $set: {
+        "ageCheck.status": "pending",
+        "ageCheck.documents": uploads.map((u, i) => ({ traveller: u.traveller, docType: u.docType, image: saved[i]._id })),
+        "ageCheck.submittedAt": new Date(),
+      },
+      $unset: { "ageCheck.note": 1 },
+    },
+  );
+  if (!updated.modifiedCount) {
+    await IdDocument.deleteMany({ _id: { $in: saved.map((d) => d._id) } });
+    return { message: "Your ID has already been sent." };
+  }
+
+  const admins = await User.find({ role: "admin", status: "active" }).select("_id").lean();
+  await notify(
+    admins.map((a) => a._id),
+    { title: "Age check to review", body: `${viewer.name} · ${booking.trip?.title ?? "trip"}`, href: "/admin/age-checks" },
+  );
+  revalidatePath("/", "layout");
+  return { success: true, message: "Thanks. We'll check your ID and let you know, usually within a day." };
+}
+
+/** Cancel your own booking. The seat fee is refunded by how long is left before departure. */
 export async function cancelBooking(bookingId: string) {
   const viewer = await requireUser();
   if (!ID_RE.test(bookingId)) return;
@@ -98,6 +121,19 @@ export async function cancelBooking(bookingId: string) {
     { _id: booking._id },
     { status: "cancelled", cancelledAt: new Date(), cancelledBy: "traveller" },
   );
+  const refunded = await refundSeatFee(
+    booking._id,
+    refundPercent(booking.trip.startDate),
+    "Cancelled by traveller",
+  );
+  await IdDocument.deleteMany({ booking: booking._id });
+  if (refunded) {
+    await notify(viewer.id, {
+      title: `Refund on its way: ${formatPrice(refunded)}`,
+      body: `For your cancelled booking on ${booking.trip.title}. It can take 5 to 7 working days to reach you.`,
+      href: "/trips/me",
+    });
+  }
   const agency = await Agency.findById(booking.trip.agency).select("owner").lean();
   await postSystemMessage(booking.trip._id, `${firstName(viewer.name)} left the group.`);
   if (agency) {
@@ -169,7 +205,7 @@ export async function updateProfile(_prev: ActionState, formData: FormData): Pro
 // ---------------------------------------------------------------------------
 
 export async function createTravelPlan(_prev: ActionState, formData: FormData): Promise<ActionState> {
-  const viewer = await requireUser("/trips/buddies/new");
+  const viewer = await requireVerified("/trips/buddies/new");
 
   const origin = text(formData, "origin");
   const destination = text(formData, "destination");
@@ -221,6 +257,8 @@ export async function sendBuddyRequest(
   const viewer = await getCurrentUser();
   if (!viewer) redirect("/login?next=/trips/buddies");
   if (!ID_RE.test(planId)) return { message: "Plan not found." };
+  // Sends unverified accounts to verify first, then back to the plans.
+  await requireVerified("/trips/buddies");
 
   const message = text(formData, "message");
   if (message.length > 300) return { errors: { message: ["Keep it under 300 characters."] } };
