@@ -26,13 +26,20 @@ export function PhotoStep({ draft, update, onDone }: StepProps) {
     // One at a time keeps each request small and the order predictable.
     for (const file of picked) {
       try {
+        const photo = await resizeImage(file).catch(() => null);
+        if (!photo) {
+          setError("We couldn't read one of those photos. Try a JPEG or PNG.");
+          continue;
+        }
         const body = new FormData();
-        body.set("photo", await resizeImage(file), "photo.jpg");
+        body.set("photo", photo, "photo.jpg");
         const result = await uploadPhoto(body);
         if (result.ok) update((d) => ({ photos: [...d.photos, result.photo] }));
         else setError(result.error);
       } catch {
-        setError("We couldn't read one of those photos. Try a JPEG or PNG.");
+        // The photo was fine; the request to the server failed (offline, a server
+        // restart, or a page left open across an update).
+        setError("The upload didn't go through. Refresh the page and try again.");
       } finally {
         setUploading((n) => n - 1);
       }
