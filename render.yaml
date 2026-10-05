@@ -5,9 +5,10 @@ services:
     name: compapp
     runtime: node
     region: singapore
-    # Companion's photo checks keep TensorFlow models in memory: the 512 MB plans can run
-    # out during a selfie check. Move to "standard" (2 GB) if that happens.
-    plan: starter
+    # Companion's photo checks keep TensorFlow models in memory and need about 550 MB on
+    # their own, on top of the site itself. The 512 MB plans (free, starter) run out during
+    # a photo or selfie check and Render restarts the service, so this needs 2 GB.
+    plan: standard
     buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /api/health

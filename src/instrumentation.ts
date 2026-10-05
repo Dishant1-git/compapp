@@ -47,4 +47,10 @@ export function register() {
   if (!env("APP_URL")) warnings.push("APP_URL is not set: links in emails use the address each request arrives on.");
 
   for (const warning of warnings) console.warn(`[config] ${warning}`);
+
+  // Load the Companion photo-check models in the background now, so the first
+  // person to upload a photo after a deploy or restart doesn't wait for them.
+  void import("@/lib/companion/moderation")
+    .then((moderation) => moderation.warmUp())
+    .catch((error) => console.error("[config] Could not preload the photo-check models", error));
 }

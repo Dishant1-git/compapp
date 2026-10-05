@@ -4,6 +4,7 @@ import { ProfileCard } from "@/components/companion/profile-card";
 import { ButtonLink } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth/dal";
 import { getCompanionDraft } from "@/lib/companion/queries";
+import { publicProfile } from "@/lib/companion/types";
 
 export const metadata: Metadata = {
   title: "Your profile",
@@ -22,10 +23,13 @@ export default async function CompanionHomePage() {
         You&apos;re <em>all set.</em>
       </h1>
       <p className="mt-4 leading-relaxed text-muted-foreground">
-        Your Companion profile is live. We&apos;ll let you know as soon as matching opens.
+        Your Companion profile is live. See who&apos;s near you.
       </p>
+      <ButtonLink href="/companion/discover" size="lg" fullWidth className="mt-6">
+        See people near you
+      </ButtonLink>
       <div className="mt-8">
-        <ProfileCard profile={state.draft} />
+        <ProfileCard profile={publicProfile(state.draft)} />
       </div>
       <ButtonLink href="/companion/join?edit=1" variant="outline" size="lg" fullWidth className="mt-6">
         Edit profile

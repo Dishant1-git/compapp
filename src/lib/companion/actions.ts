@@ -13,6 +13,8 @@ import { normalizePhone } from "@/lib/phone";
 import {
   BODY_TYPES,
   COMPANION_GENDERS,
+  DEFAULT_DISTANCE_KM,
+  DISTANCES,
   DRINKING,
   HOBBIES,
   MAX_AGE,
@@ -33,7 +35,8 @@ import {
 import { moderatePhoto } from "./moderation";
 import { getCompanionAccount, getCompanionDraft } from "./queries";
 import { imageUrl, resumeStep, type ActionResult, type CompanionDraft, type SelfieStatus } from "./types";
-import { verifySelfie } from "./verification";
+import { findFaces } from "./face-match";
+import { toKnownFaces, verifySelfie, type KnownFace } from "./verification";
 import { isFrontend, remoteAction } from "@/lib/remote";
 
 const fail = (error: string) => ({ ok: false as const, error });
@@ -162,10 +165,14 @@ export async function saveLocation(input: {
   city: string;
   lat?: number | null;
   lng?: number | null;
+  maxDistanceKm?: number;
 }): Promise<ActionResult> {
   if (isFrontend()) return remoteAction("companion/actions.saveLocation", [input]);
   const city = String(input.city ?? "").trim().slice(0, 80);
   if (city.length < 2) return fail("Enter the city you live in.");
+  const maxDistanceKm = isOption(DISTANCES, String(input.maxDistanceKm))
+    ? Number(input.maxDistanceKm)
+    : DEFAULT_DISTANCE_KM;
 
   const lat = Number(input.lat);
   const lng = Number(input.lng);
@@ -174,13 +181,34 @@ export async function saveLocation(input: {
   // Rounded to ~1 km so an exact address is never stored.
   const round = (n: number) => Math.round(n * 100) / 100;
 
+  if (!hasPoint) {
+    // A point shared earlier stays (it's what distance matching uses), unless they've
+    // typed a different city: then it no longer says where they are.
+    const viewer = await companionUser();
+    if (!viewer) return fail(SIGNED_OUT);
+    await CompanionProfile.updateOne(
+      { user: viewer.id, "location.city": { $ne: city } },
+      { $unset: { "location.point": 1 } },
+    );
+  }
   return saveProfile(
-    hasPoint
-      ? { $set: { "location.city": city, "location.point": { type: "Point", coordinates: [round(lng), round(lat)] } } }
-      : { $set: { "location.city": city }, $unset: { "location.point": 1 } },
+    {
+      $set: {
+        "location.city": city,
+        maxDistanceKm,
+        ...(hasPoint && { "location.point": { type: "Point", coordinates: [round(lng), round(lat)] } }),
+      },
+    },
     // Fill in the Stranger Trips city too, but don't overwrite one they already set.
     { filter: { city: { $in: [null, ""] } }, update: { $set: { city } } },
   );
+}
+
+/** Change how far away the profiles on the discover page may be. */
+export async function saveDistance(km: number): Promise<ActionResult> {
+  if (isFrontend()) return remoteAction("companion/actions.saveDistance", [km]);
+  if (!isOption(DISTANCES, String(km))) return fail("Choose a distance.");
+  return saveProfile({ $set: { maxDistanceKm: Number(km) } });
 }
 
 export async function saveGender(gender: string): Promise<ActionResult> {
@@ -264,6 +292,7 @@ export async function uploadPhoto(
     contentType: image.contentType,
     bytes: image.data.length,
     data: image.data,
+    faces: toKnownFaces(verdict.faces),
   });
   await CompanionProfile.updateOne(
     { user: viewer.id },
@@ -304,7 +333,7 @@ export async function submitSelfie(
 
   let decision;
   try {
-    decision = await verifySelfie({ selfie: image.data, photos: await photoData(viewer.id, profile.photos) });
+    decision = await verifySelfie({ selfie: image.data, photos: await photoFaces(viewer.id, profile.photos) });
   } catch (error) {
     console.error("Automatic selfie check failed", error);
     return fail("We couldn't check your selfie just now. Try again in a minute.");
@@ -362,7 +391,7 @@ export async function getSelfieStatus(): Promise<{ status: SelfieStatus; note?: 
   if (!shot) return { status: "pending" };
   let decision;
   try {
-    decision = await verifySelfie({ selfie: shot.data, photos: await photoData(viewer.id, profile.photos) });
+    decision = await verifySelfie({ selfie: shot.data, photos: await photoFaces(viewer.id, profile.photos) });
   } catch (error) {
     console.error("Automatic selfie re-check failed", error);
     return { status: "pending" }; // tried again on the next poll
@@ -379,11 +408,26 @@ export async function getSelfieStatus(): Promise<{ status: SelfieStatus; note?: 
   return { status, note };
 }
 
-/** Image data of the profile photos, main photo first, for the face match. */
-async function photoData(userId: string, ids: unknown[]) {
-  const found = await CompanionImage.find({ _id: { $in: ids }, owner: userId }).select("+data");
+/**
+ * The faces in each profile photo, main photo first, for the face match. They are
+ * saved with the photo when it's uploaded; a photo from before that is scanned the
+ * first time it's needed (only if the match gets that far) and then remembered.
+ */
+async function photoFaces(userId: string, ids: unknown[]) {
+  const found = await CompanionImage.find({ _id: { $in: ids }, owner: userId }).select("+faces").lean();
   const order = ids.map(String);
-  return found.sort((a, b) => order.indexOf(String(a._id)) - order.indexOf(String(b._id))).map((p) => p.data);
+  return found
+    .sort((a, b) => order.indexOf(String(a._id)) - order.indexOf(String(b._id)))
+    .map((photo) => async (): Promise<KnownFace[]> => {
+      if (photo.faces) {
+        return photo.faces.map((f) => ({ descriptor: f.descriptor, score: f.score ?? 0, width: f.width ?? 0 }));
+      }
+      const stored = await CompanionImage.findById(photo._id).select("+data");
+      if (!stored) return [];
+      const faces = toKnownFaces(await findFaces(stored.data));
+      await CompanionImage.updateOne({ _id: photo._id }, { $set: { faces } });
+      return faces;
+    });
 }
 
 // ─── Done ────────────────────────────────────────────────────────────────────

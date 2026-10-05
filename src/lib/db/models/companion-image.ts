@@ -12,6 +12,13 @@ const companionImageSchema = new Schema(
     contentType: { type: String, required: true },
     bytes: { type: Number, required: true },
     data: { type: Buffer, required: true, select: false },
+    // Profile photos: the faces the automatic check found at upload, kept so the selfie
+    // check doesn't scan every photo again. Missing on photos uploaded before this existed.
+    faces: {
+      type: [{ _id: false, descriptor: [Number], score: Number, width: Number }],
+      default: undefined,
+      select: false,
+    },
   },
   { timestamps: true },
 );

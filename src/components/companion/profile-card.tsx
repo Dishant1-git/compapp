@@ -5,20 +5,22 @@ import {
   HOBBIES,
   SEXUALITIES,
   SMOKING,
-  ageFrom,
   feetAndInches,
   optionLabel,
 } from "@/lib/companion/constants";
-import type { CompanionDraft } from "@/lib/companion/types";
+import type { PublicProfile } from "@/lib/companion/types";
 
 /**
  * How a Companion profile looks to other people: an editorial portrait with the
  * name set over the photo, then the details in layers. Swipe (or scroll) the photos.
+ * `distanceKm` is how far away they are from whoever is looking, when that's known.
  */
-export function ProfileCard({ profile }: { profile: CompanionDraft }) {
+export function ProfileCard({ profile, distanceKm }: { profile: PublicProfile; distanceKm?: number | null }) {
   const firstName = profile.name.split(" ")[0];
-  const age = profile.birthDate ? ageFrom(profile.birthDate) : null;
-  const verified = profile.selfie?.status === "verified";
+  const { age, verified } = profile;
+  const place = [profile.city, distanceKm != null && (distanceKm < 1 ? "Under 1 km away" : `${distanceKm} km away`)]
+    .filter(Boolean)
+    .join(" · ");
 
   const basics = [
     profile.heightCm && `${profile.heightCm} cm (${feetAndInches(profile.heightCm)})`,
@@ -39,6 +41,9 @@ export function ProfileCard({ profile }: { profile: CompanionDraft }) {
               key={photo.id}
               src={photo.url}
               alt={`${firstName}, photo ${i + 1} of ${profile.photos.length}`}
+              // Only the main photo is fetched up front; the rest load when swiped to.
+              loading={i === 0 ? "eager" : "lazy"}
+              decoding="async"
               className="aspect-[4/5] w-full shrink-0 snap-center object-cover"
             />
           ))}
@@ -64,7 +69,7 @@ export function ProfileCard({ profile }: { profile: CompanionDraft }) {
               </svg>
             )}
           </p>
-          {profile.city && <p className="eyebrow mt-3 text-highlight">{profile.city}</p>}
+          {place && <p className="eyebrow mt-3 text-highlight">{place}</p>}
         </div>
 
         {profile.photos.length > 1 && (

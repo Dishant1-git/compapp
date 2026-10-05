@@ -2,6 +2,7 @@ import {
   FIRST_PROFILE_STEP,
   MIN_HOBBIES,
   MIN_PHOTOS,
+  ageFrom,
   type JoinStep,
 } from "./constants";
 
@@ -15,6 +16,7 @@ export type CompanionDraft = {
   bodyType: string | null;
   city: string;
   sharedLocation: boolean;
+  maxDistanceKm: number;
   gender: string | null;
   sexuality: string[];
   showSexuality: boolean;
@@ -26,7 +28,30 @@ export type CompanionDraft = {
   selfie: { status: SelfieStatus; url: string; note?: string } | null;
 };
 
-export type ActionResult = { ok: true } | { ok: false; error: string };
+/** What other people see of a profile: an age, never the date of birth. */
+export type PublicProfile = Pick<
+  CompanionDraft,
+  | "name"
+  | "heightCm"
+  | "bodyType"
+  | "city"
+  | "gender"
+  | "sexuality"
+  | "showSexuality"
+  | "hobbies"
+  | "drinking"
+  | "smoking"
+  | "photos"
+> & { age: number | null; verified: boolean };
+
+export function publicProfile(d: CompanionDraft): PublicProfile {
+  return { ...d, age: d.birthDate ? ageFrom(d.birthDate) : null, verified: d.selfie?.status === "verified" };
+}
+
+/** Someone else's profile on the discover page. `distanceKm` is null when either side hasn't shared a location. */
+export type NearbyProfile = PublicProfile & { id: string; distanceKm: number | null };
+
+export type ActionResult ={ ok: true } | { ok: false; error: string };
 
 /**
  * The first profile slide that still needs an answer. The preview only unlocks

@@ -2,6 +2,7 @@ import { Schema, model, models, type InferSchemaType, type Model } from "mongoos
 import {
   BODY_TYPES,
   COMPANION_GENDERS,
+  DEFAULT_DISTANCE_KM,
   DRINKING,
   HOBBIES,
   SEXUALITIES,
@@ -37,6 +38,8 @@ const companionProfileSchema = new Schema(
       city: { type: String, trim: true },
       point: { type: pointSchema, default: undefined },
     },
+    // How far away the profiles they're shown may be (see DISTANCES).
+    maxDistanceKm: { type: Number, default: DEFAULT_DISTANCE_KM },
     gender: { type: String, enum: ids(COMPANION_GENDERS) },
     sexuality: { type: [String], enum: ids(SEXUALITIES), default: [] },
     showSexuality: { type: Boolean, default: true },

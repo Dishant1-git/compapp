@@ -3,8 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useCallback, useState } from "react";
 import { finishProfile } from "@/lib/companion/actions";
-import { FIRST_PROFILE_STEP, JOIN_STEPS, type JoinStep } from "@/lib/companion/constants";
-import { resumeStep, type CompanionDraft } from "@/lib/companion/types";
+import { DEFAULT_DISTANCE_KM, FIRST_PROFILE_STEP, JOIN_STEPS, type JoinStep } from "@/lib/companion/constants";
+import { publicProfile, resumeStep, type CompanionDraft } from "@/lib/companion/types";
 import { cn } from "@/lib/utils";
 import {
   BirthdayStep,
@@ -29,6 +29,7 @@ const emptyDraft = (name: string): CompanionDraft => ({
   bodyType: null,
   city: "",
   sharedLocation: false,
+  maxDistanceKm: DEFAULT_DISTANCE_KM,
   gender: null,
   sexuality: [],
   showSexuality: true,
@@ -165,9 +166,10 @@ export function JoinFlow({
             submitLabel="Done"
             pendingLabel="Creating your profile…"
             onSubmit={finishProfile}
-            onDone={() => router.replace("/companion")}
+            // Straight on to the people near them.
+            onDone={() => router.replace("/companion/discover")}
           >
-            <ProfileCard profile={draft} />
+            <ProfileCard profile={publicProfile(draft)} />
           </StepForm>
         )}
       </div>

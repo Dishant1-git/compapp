@@ -11,6 +11,7 @@
     "start": "next start",
     "lint": "eslint",
     "seed": "tsx --env-file=.env.local scripts/seed.ts",
+    "seed:companion": "tsx --env-file=.env.local scripts/seed-companion.ts",
     "make-admin": "tsx --env-file=.env.local scripts/make-admin.ts"
   },
   "dependencies": {

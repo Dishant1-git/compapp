@@ -1,5 +1,7 @@
 import "server-only";
-import { findFaces, loadModels } from "./face-match";
+import { createRequire } from "node:module";
+import path from "node:path";
+import { findFaces, loadModels, type Face } from "./face-match";
 
 /**
  * Automatic checks on profile photos before they're saved: free and self-hosted,
@@ -13,7 +15,9 @@ import { findFaces, loadModels } from "./face-match";
  * need a general vision model to spot reliably.
  */
 
-export type ModerationResult = { ok: true } | { ok: false; reason: string };
+type Check = { ok: true } | { ok: false; reason: string };
+/** `faces` is every face found in an accepted photo, so the selfie check can reuse them. */
+export type ModerationResult = { ok: true; faces: Face[] } | { ok: false; reason: string };
 
 /** Smallest side, in px, of a usable photo. The upload step resizes to 1280. */
 const MIN_SIDE = 320;
@@ -47,7 +51,7 @@ const MAX_PEOPLE = 3;
  */
 const MIN_ESTIMATED_AGE = 16;
 
-const reject = (reason: string): ModerationResult => ({ ok: false, reason });
+const reject = (reason: string) => ({ ok: false as const, reason });
 
 /** Check a profile photo. Throws if a check itself fails, so the caller can ask them to retry. */
 export async function moderatePhoto(image: Buffer): Promise<ModerationResult> {
@@ -60,7 +64,7 @@ export async function moderatePhoto(image: Buffer): Promise<ModerationResult> {
   return checkFaces(image);
 }
 
-async function checkQuality(image: Buffer): Promise<ModerationResult> {
+async function checkQuality(image: Buffer): Promise<Check> {
   const { default: sharp } = await import("sharp");
   const { width = 0, height = 0 } = await sharp(image).metadata();
   const short = Math.min(width, height);
@@ -120,15 +124,42 @@ function sharpness(px: Uint8Array | Buffer, w: number, h: number) {
 type Nsfw = Awaited<ReturnType<typeof import("nsfwjs").load>>;
 let nsfw: Promise<Nsfw> | undefined;
 
-async function checkNudity(image: Buffer): Promise<ModerationResult> {
-  const faceapi = await loadModels(); // sets up the shared TensorFlow backend
-  nsfw ??= import("nsfwjs")
-    .then((m) => m.load("MobileNetV2"))
-    .catch((error) => {
-      nsfw = undefined; // try again next time
-      throw error;
+/**
+ * NSFWJS's MobileNetV2, loaded once. The model files are handed over directly:
+ * the library's own loader copies the 3.5 MB of weights one character at a time,
+ * which takes about four seconds (ten times longer than everything else here).
+ */
+function loadNsfw() {
+  nsfw ??= (async () => {
+    const { load } = await import("nsfwjs/core");
+    const { MobileNetV2Model } = await import("nsfwjs/models/mobilenet_v2");
+    const files = path.join(process.cwd(), "node_modules/nsfwjs/dist/models/mobilenet_v2");
+    const read = createRequire(path.join(files, "index.js"));
+    return load("MobileNetV2", {
+      modelDefinitions: [
+        {
+          ...MobileNetV2Model,
+          modelJson: async () => ({ default: read("./model.min.js") }),
+          weightBundles: [async () => ({ default: read("./group1-shard1of1.min.js") })],
+        },
+      ],
     });
-  const model = await nsfw;
+  })().catch((error) => {
+    nsfw = undefined; // try again next time
+    throw error;
+  });
+  return nsfw;
+}
+
+/** Load every model now, so the first person to upload a photo doesn't wait for it. */
+export async function warmUp() {
+  await loadModels();
+  await loadNsfw();
+}
+
+async function checkNudity(image: Buffer): Promise<Check> {
+  const faceapi = await loadModels(); // sets up the shared TensorFlow backend
+  const model = await loadNsfw();
 
   const { default: sharp } = await import("sharp");
   // Centre square: the model squashes anything else, which skews its scores.
@@ -152,7 +183,8 @@ async function checkNudity(image: Buffer): Promise<ModerationResult> {
 }
 
 async function checkFaces(image: Buffer): Promise<ModerationResult> {
-  const faces = (await findFaces(image)).filter((f) => f.score >= MIN_SCORE && f.width >= MIN_WIDTH);
+  const found = await findFaces(image);
+  const faces = found.filter((f) => f.score >= MIN_SCORE && f.width >= MIN_WIDTH);
   const [main, next] = faces;
   if (!main) return reject("We couldn't find a clear face. Use a photo where your face is easy to see.");
   if (faces.length > MAX_PEOPLE) return reject("There are too many people in this photo. Use one of just you.");
@@ -163,5 +195,5 @@ async function checkFaces(image: Buffer): Promise<ModerationResult> {
   if (faces.some((f) => f.age < MIN_ESTIMATED_AGE)) {
     return reject("This photo looks like it may include someone under 18, which isn't allowed.");
   }
-  return { ok: true };
+  return { ok: true, faces: found };
 }

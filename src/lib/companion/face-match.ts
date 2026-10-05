@@ -77,7 +77,7 @@ export async function findFaces(image: Buffer): Promise<Face[]> {
 }
 
 /** 0 = identical; the same person is usually under 0.45, different people over 0.55. */
-export function faceDistance(a: Float32Array, b: Float32Array) {
+export function faceDistance(a: ArrayLike<number>, b: ArrayLike<number>) {
   let sum = 0;
   for (let i = 0; i < a.length; i++) sum += (a[i] - b[i]) ** 2;
   return Math.sqrt(sum);

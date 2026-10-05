@@ -15,6 +15,7 @@ import {
 import {
   BODY_TYPES,
   COMPANION_GENDERS,
+  DISTANCES,
   DRINKING,
   HOBBIES,
   MAX_HEIGHT_CM,
@@ -137,6 +138,7 @@ type Coords = { lat: number; lng: number };
 export function LocationStep({ draft, update, onDone }: StepProps) {
   const [city, setCity] = useState(draft.city);
   const [coords, setCoords] = useState<Coords | null>(null);
+  const [distance, setDistance] = useState(draft.maxDistanceKm);
   const [locating, setLocating] = useState(false);
   const [locateError, setLocateError] = useState<string>();
 
@@ -170,8 +172,10 @@ export function LocationStep({ draft, update, onDone }: StepProps) {
       description="We use this to find companions near you. Only your city is shown."
       canSubmit={city.trim().length > 0}
       onSubmit={async () => {
-        const result = await saveLocation({ city, lat: coords?.lat, lng: coords?.lng });
-        if (result.ok) update({ city: city.trim(), sharedLocation: !!coords || draft.sharedLocation });
+        const result = await saveLocation({ city, lat: coords?.lat, lng: coords?.lng, maxDistanceKm: distance });
+        if (result.ok) {
+          update({ city: city.trim(), sharedLocation: !!coords || draft.sharedLocation, maxDistanceKm: distance });
+        }
         return result;
       }}
       onDone={onDone}
@@ -196,6 +200,15 @@ export function LocationStep({ draft, update, onDone }: StepProps) {
           onChange={(e) => setCity(e.target.value)}
         />
       </div>
+
+      <ChoiceGroup
+        name="distance"
+        legend="Show me people within"
+        hint="Distance works best when you share your location above."
+        options={DISTANCES}
+        value={[String(distance)]}
+        onChange={([picked]) => setDistance(Number(picked))}
+      />
     </StepForm>
   );
 }

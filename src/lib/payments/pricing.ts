@@ -42,6 +42,19 @@ export function agencyPlan(id: string) {
   return AGENCY_PLANS.find((p) => p.id === id);
 }
 
+// ─── Companion subscription ──────────────────────────────────────────────────
+
+/**
+ * What someone subscribes to before sending a request on Companion. Change the
+ * prices (and lengths) here: the subscription page shows whatever this says.
+ * `popular` puts a badge on that card.
+ */
+export const COMPANION_PLANS = [
+  { id: "2-months", months: 2, price: 499, popular: false },
+  { id: "4-months", months: 4, price: 899, popular: true },
+  { id: "6-months", months: 6, price: 1199, popular: false },
+] as const satisfies readonly { id: string; months: number; price: number; popular: boolean }[];
+
 // ─── Traveller seat fee ──────────────────────────────────────────────────────
 
 /** Platform fee to reserve one seat. The trip price itself is paid to the agency. */

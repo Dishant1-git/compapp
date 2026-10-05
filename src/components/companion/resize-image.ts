@@ -1,10 +1,13 @@
 /**
  * Shrink an image (a picked file or a canvas snapshot) to at most `maxSide`
  * pixels on its longest side and re-encode it as JPEG. Phone photos are often
- * 5–10 MB; this brings them to a few hundred KB before upload and strips EXIF
- * data such as GPS location.
+ * 5–10 MB; this brings them to 100–250 KB before upload and strips EXIF data
+ * such as GPS location. The size is what a profile card shows on a phone: every
+ * extra pixel makes the upload, the checks and each later view of the photo slower.
+ * Keep the quality: lower values smear fine detail and the blur check starts
+ * refusing photos that are fine.
  */
-export async function resizeImage(source: Blob | CanvasImageSource, maxSide = 1440, quality = 0.85) {
+export async function resizeImage(source: Blob | CanvasImageSource, maxSide = 1080, quality = 0.85) {
   const bitmap =
     source instanceof Blob ? await createImageBitmap(source, { imageOrientation: "from-image" }) : source;
   const { width, height } = sizeOf(bitmap);

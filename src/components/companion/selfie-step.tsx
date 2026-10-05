@@ -81,7 +81,7 @@ export function SelfieStep({ draft, update, onDone }: StepProps) {
   async function capture() {
     const v = video.current;
     if (!v || !v.videoWidth) return;
-    const blob = await resizeImage(v, 1280, 0.9);
+    const blob = await resizeImage(v, 960, 0.85);
     setShot({ blob, url: URL.createObjectURL(blob) });
     setStream(null); // stops the camera
   }

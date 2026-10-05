@@ -111,6 +111,17 @@ export const SMOKING = [
   { id: "quitting", label: "Trying to quit" },
 ] as const satisfies readonly Option[];
 
+/** How far away the profiles someone is shown may live. They pick one; ids are km. */
+export const DISTANCES = [
+  { id: "25", label: "25 km" },
+  { id: "50", label: "50 km" },
+  { id: "100", label: "100 km" },
+  { id: "200", label: "200 km" },
+  { id: "500", label: "500 km" },
+] as const satisfies readonly Option[];
+
+export const DEFAULT_DISTANCE_KM = 100;
+
 /**
  * Shown during the live selfie. A random one is picked each time so an old
  * photo can't be reused; reviewers check the selfie matches the pose.
