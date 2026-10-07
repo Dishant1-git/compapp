@@ -7,6 +7,7 @@
  */
 import bcrypt from "bcryptjs";
 import mongoose, { Types } from "mongoose";
+import { ensureSrvDns } from "@/lib/db/dns";
 import { Agency } from "@/lib/db/models/agency";
 import { AgencyPlan } from "@/lib/db/models/agency-plan";
 import { Booking } from "@/lib/db/models/booking";
@@ -196,6 +197,7 @@ function slugify(value: string) {
 async function main() {
   const uri = process.env.MONGODB_URI;
   if (!uri) throw new Error("MONGODB_URI is not set (see .env.example)");
+  ensureSrvDns();
   await mongoose.connect(uri);
   await Promise.all(
     [User, Agency, Trip, Booking, TravelPlan, BuddyRequest, Report, TripInterest, Message, Notification].map(

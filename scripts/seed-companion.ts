@@ -11,6 +11,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import mongoose from "mongoose";
+import { ensureSrvDns } from "@/lib/db/dns";
 import { CompanionImage } from "@/lib/db/models/companion-image";
 import { CompanionProfile } from "@/lib/db/models/companion-profile";
 import { User } from "@/lib/db/models/user";
@@ -57,6 +58,7 @@ async function removeDemo() {
 async function main() {
   const uri = process.env.MONGODB_URI;
   if (!uri) throw new Error("MONGODB_URI is not set (see .env.example)");
+  ensureSrvDns();
   await mongoose.connect(uri);
 
   const removed = await removeDemo();

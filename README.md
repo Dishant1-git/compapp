@@ -225,6 +225,79 @@ sexual orientation → interests → drinking & smoking → photos → live self
 | `/companion/join` | The onboarding slides. `?edit=1` edits a finished profile. |
 | `/companion` | Your finished profile. |
 
+## Making changes yourself
+
+Most everyday changes are one file. Find what you want to change here:
+
+| I want to change… | Edit this |
+|---|---|
+| A colour, font or spacing | `src/app/globals.css` (see **Theming** below). Change it there, not in components. |
+| Support email shown on `/terms`, `/privacy`, `/refunds` | `src/lib/site-config.ts` |
+| Prices, refund schedule, seat fee | `src/lib/payments/pricing.ts` |
+| Companion choices (body types, hobbies, distances, drinking, smoking, age and height limits) | `src/lib/companion/constants.ts` |
+| The order of the Companion sign-up slides | `JOIN_STEPS` in `src/lib/companion/constants.ts` |
+| The wording or fields on a Companion slide | `src/components/companion/about-steps.tsx` (one function per slide: `BirthdayStep`, `LookStep`, `LocationStep`, …) |
+| "Use my current location" messages and timeouts | `LOCATION_MESSAGES` and the `LOCATE_…` values above `LocationStep` in `src/components/companion/about-steps.tsx` |
+| Selfie match strictness | `src/lib/companion/verification.ts` |
+| Photo rules (nudity, blur, face size) | `src/lib/companion/moderation.ts` |
+| OTP length, expiry, resend limits | `src/lib/auth/otp.ts` |
+| How trips are matched or trust is scored | `src/lib/trips/matching.ts`, `src/lib/trips/trust.ts` |
+| What is stored for a user, trip, booking… | The model in `src/lib/db/models/` |
+| A page's layout or text | `src/app/<the URL>/page.tsx`, and the components it imports from `src/components/` |
+
+**How the code is organised** (the same pattern everywhere, so one example teaches the rest):
+
+1. A **page** in `src/app/` reads data and lays out components.
+2. A **component** in `src/components/` draws the screen. Files starting with `"use client"`
+   run in the browser (buttons, forms); the others run on the server.
+3. **Reads** live in `src/lib/<area>/queries.ts`, **writes** in `src/lib/<area>/actions.ts`.
+   Every write checks who is signed in and validates the input again on the server; never
+   rely on the form alone.
+4. **Models** in `src/lib/db/models/` describe what MongoDB stores.
+
+So to add a field to the Companion profile: add it to the model
+(`src/lib/db/models/companion-profile.ts`), accept and validate it in an action
+(`src/lib/companion/actions.ts`), then show an input for it on a slide
+(`src/components/companion/about-steps.tsx`).
+
+**Before you commit**
+
+```bash
+npx tsc --noEmit     # type errors
+npm run lint         # style and common mistakes
+npm run build        # the same build the server runs
+```
+
+If you added a new data function or Server Action, also run
+`node scripts/add-remote-guards.mjs` (needed for the Vercel + Render split).
+
+**How "Use my current location" works**
+
+The button on the Companion location slide asks the browser for the device's position, then
+looks up the city name with BigDataCloud's free endpoint (no API key). Three things can go wrong,
+each with its own message:
+
+- The page isn't on `https` or `localhost`: browsers refuse without asking. To test on a
+  phone, use a tunnel with https, not `http://192.168.x.x:3000`.
+- The person blocked location: they have to allow it in the browser's site settings.
+- The device has no position (common on desktops): the city is guessed from the network
+  address and they're asked to check it. No coordinates are saved in this case.
+
+Coordinates are rounded to about 1 km before saving (`saveLocation` in
+`src/lib/companion/actions.ts`), so an exact address is never stored.
+
+**Common errors**
+
+| Error | Cause and fix |
+|---|---|
+| `querySrv ECONNREFUSED _mongodb._tcp.…` | Node couldn't look up the Atlas address on this network. `src/lib/db/dns.ts` switches to public DNS (1.1.1.1, 8.8.8.8) when this happens; restart `npm run dev`. If it persists, check the internet connection or a firewall blocking DNS. |
+| `MONGODB_URI is not set` | Copy `.env.example` to `.env.local` and fill it in. |
+| `MongoServerSelectionError` / timeout | In Atlas, add your IP under Network Access, and check the username and password in `MONGODB_URI`. |
+| Camera or location does nothing on a phone | The page must be `https`. |
+
+Never put real passwords or keys in `.env.example`: it is committed to git. Real values go
+in `.env.local`, which is not.
+
 ## Folder structure
 
 ```

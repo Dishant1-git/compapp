@@ -135,6 +135,22 @@ export function LookStep({ draft, update, onDone }: StepProps) {
 
 type Coords = { lat: number; lng: number };
 
+// What the person reads under the "Use my current location" button. Edit the wording here.
+const LOCATION_MESSAGES = {
+  unsupported: "Your browser can't share location. Type your city instead.",
+  notSecure: "Location only works on a secure (https) page. Type your city instead.",
+  blocked:
+    "Location is blocked. Allow it for this site in your browser, and check location is on for your device. Or type your city.",
+  noCityName: "Got your location, but couldn't find the city name. Type it below.",
+  guessedCity: "Couldn't get your exact location, so we guessed your city. Check it below.",
+  notFound: "Couldn't find your location. Type your city instead.",
+};
+
+// How long to wait for the device, and how old a remembered position may be.
+const LOCATE_TIMEOUT_MS = 10_000;
+const LOCATE_MAX_AGE_MS = 5 * 60_000;
+const CITY_LOOKUP_TIMEOUT_MS = 8_000;
+
 export function LocationStep({ draft, update, onDone }: StepProps) {
   const [city, setCity] = useState(draft.city);
   const [coords, setCoords] = useState<Coords | null>(null);
@@ -142,28 +158,47 @@ export function LocationStep({ draft, update, onDone }: StepProps) {
   const [locating, setLocating] = useState(false);
   const [locateError, setLocateError] = useState<string>();
 
+  /** The device told us where it is: keep the point and fill in the city name. */
+  async function onPositionFound(position: GeolocationPosition) {
+    const found = { lat: position.coords.latitude, lng: position.coords.longitude };
+    setCoords(found);
+    const name = await cityAt(found);
+    if (name) setCity(name);
+    else setLocateError(LOCATION_MESSAGES.noCityName);
+    setLocating(false);
+  }
+
+  /** The device couldn't or wouldn't tell us: explain why, and guess the city if we may. */
+  async function onPositionFailed(error: GeolocationPositionError) {
+    if (error.code === error.PERMISSION_DENIED) {
+      setLocateError(LOCATION_MESSAGES.blocked);
+    } else {
+      // No fix (common on desktops with no GPS or Wi-Fi positioning): guess the city
+      // from the network instead. Too rough to store as a point, so no coords.
+      const name = await cityAt();
+      if (name) setCity(name);
+      setLocateError(name ? LOCATION_MESSAGES.guessedCity : LOCATION_MESSAGES.notFound);
+    }
+    setLocating(false);
+  }
+
   function locate() {
     if (!("geolocation" in navigator)) {
-      setLocateError("Your browser can't share location. Type your city instead.");
+      setLocateError(LOCATION_MESSAGES.unsupported);
+      return;
+    }
+    // Browsers refuse location on plain http (anything but localhost) without ever asking.
+    if (!window.isSecureContext) {
+      setLocateError(LOCATION_MESSAGES.notSecure);
       return;
     }
     setLocating(true);
     setLocateError(undefined);
-    navigator.geolocation.getCurrentPosition(
-      async ({ coords: c }) => {
-        const found = { lat: c.latitude, lng: c.longitude };
-        setCoords(found);
-        const name = await cityAt(found);
-        if (name) setCity(name);
-        else setLocateError("Got your location, but couldn't find the city name. Type it below.");
-        setLocating(false);
-      },
-      () => {
-        setLocating(false);
-        setLocateError("Location access was blocked. Type your city instead.");
-      },
-      { enableHighAccuracy: false, timeout: 10_000, maximumAge: 5 * 60_000 },
-    );
+    navigator.geolocation.getCurrentPosition(onPositionFound, onPositionFailed, {
+      enableHighAccuracy: false,
+      timeout: LOCATE_TIMEOUT_MS,
+      maximumAge: LOCATE_MAX_AGE_MS,
+    });
   }
 
   return (
@@ -213,11 +248,15 @@ export function LocationStep({ draft, update, onDone }: StepProps) {
   );
 }
 
-/** City name for a point, using BigDataCloud's free, key-less browser endpoint. */
-async function cityAt({ lat, lng }: Coords) {
+/**
+ * City name for a point, using BigDataCloud's free, key-less browser endpoint.
+ * With no point it answers for the caller's IP address instead.
+ */
+async function cityAt(point?: Coords) {
   try {
-    const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat}&longitude=${lng}&localityLanguage=en`;
-    const res = await fetch(url);
+    const at = point ? `latitude=${point.lat}&longitude=${point.lng}&` : "";
+    const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?${at}localityLanguage=en`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(CITY_LOOKUP_TIMEOUT_MS) });
     if (!res.ok) return null;
     const data: { city?: string; locality?: string } = await res.json();
     return data.city || data.locality || null;
