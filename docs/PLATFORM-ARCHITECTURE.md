@@ -40,7 +40,7 @@ The gaps are in *how people sign in* and in *which data lives where*.
 | **One sign-in page** | **Done** | `/login` and `/register` offer phone code or email + password and honour `?next=`. `src/proxy.ts` sends signed-out visitors of `/trips`, `/companion` and other private areas there. Companion no longer signs people in; it only adds a verified phone to the signed-in account. |
 | **Trips profile separate from user** | **To do** | Trip-only fields sit on `User`: `personality`, `bio`, `emergencyContact`, `birthYear`, and a `gender` enum from `trips/constants`. |
 | **Core fields in one place** | **To do** | Date of birth, gender and city exist on both `User` (`birthYear`, `gender`, `city`) and `CompanionProfile` (`birthDate`, `gender`, `location.city`), with different formats and enums. |
-| Shared photos + moderation | **To do** | `CompanionImage`, `moderation.ts`, `face-match.ts` and `verification.ts` live under Companion. |
+| Shared photos + moderation | **To do** | `CompanionImage`, `moderation.ts` and `face-match.ts` live under Companion. Selfies are approved by an admin at `/admin/verifications`. |
 | Shared chat | **To do** | `Message` requires a `trip`; there are no direct conversations. |
 | Shared reports | **Partial** | `Report` works for any user but only has an optional `trip` for context. |
 | Blocking | **To do** | Doesn't exist. |
@@ -505,7 +505,7 @@ checks still live in its pages).
 ### Phase 3: Shared services
 
 - `CompanionImage` → `Media` (collection rename + `moderation` field). Move
-  `moderation.ts`, `face-match.ts` and `verification.ts` to `lib/platform/`.
+  `moderation.ts`, `face-match.ts` and `review-request.ts` to `lib/platform/`.
 - `Conversation` + `Message.conversation`; migrate each trip's messages into a group
   conversation. Add `/messages` and direct conversations (Companion chats).
 - `Report.product` + `context`; add `Block` and apply it in listings and messaging.

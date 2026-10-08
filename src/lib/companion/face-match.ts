@@ -2,8 +2,9 @@ import "server-only";
 import path from "node:path";
 
 /**
- * Free, self-hosted face matching with face-api (TensorFlow.js on WebAssembly,
- * so there's no native build step and no external service or API key).
+ * Free, self-hosted face detection with face-api (TensorFlow.js on WebAssembly,
+ * so there's no native build step and no external service or API key). Used by
+ * photo moderation; matching a selfie to the photos is done by an admin.
  * Models ship inside the npm package and load once, on the first check
  * (about 0.3 s); each photo then takes roughly a second.
  */
@@ -74,11 +75,4 @@ export async function findFaces(image: Buffer): Promise<Face[]> {
   } finally {
     tensor.dispose();
   }
-}
-
-/** 0 = identical; the same person is usually under 0.45, different people over 0.55. */
-export function faceDistance(a: ArrayLike<number>, b: ArrayLike<number>) {
-  let sum = 0;
-  for (let i = 0; i < a.length; i++) sum += (a[i] - b[i]) ** 2;
-  return Math.sqrt(sum);
 }

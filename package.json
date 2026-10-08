@@ -12,6 +12,7 @@
     "lint": "eslint",
     "seed": "tsx --env-file=.env.local scripts/seed.ts",
     "seed:companion": "tsx --env-file=.env.local scripts/seed-companion.ts",
+    "seed:admin": "tsx --env-file=.env.local scripts/seed-admin.ts",
     "make-admin": "tsx --env-file=.env.local scripts/make-admin.ts"
   },
   "dependencies": {
@@ -23,6 +24,7 @@
     "jose": "^6.2.12",
     "mongoose": "^9.10.2",
     "next": "16.3.6",
+    "nodemailer": "^10.0.16",
     "nsfwjs": "4.4.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -32,6 +34,7 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",

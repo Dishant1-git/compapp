@@ -6,7 +6,7 @@
  * After that, admins can promote others from /admin/users.
  */
 import mongoose from "mongoose";
-import { ensureSrvDns } from "@/lib/db/dns";
+import { withSrvDnsFallback } from "@/lib/db/dns";
 import { User } from "@/lib/db/models/user";
 
 async function main() {
@@ -15,8 +15,7 @@ async function main() {
   const uri = process.env.MONGODB_URI;
   if (!uri) throw new Error("MONGODB_URI is not set (see .env.example)");
 
-  ensureSrvDns();
-  await mongoose.connect(uri);
+  await withSrvDnsFallback(uri, (address) => mongoose.connect(address));
   const user = await User.findOne({ email });
   if (!user) throw new Error(`No account with email ${email}. Register it first.`);
   if (user.role === "agency") throw new Error("That account owns an agency. Use a separate account for admin.");

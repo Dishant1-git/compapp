@@ -11,15 +11,14 @@ import { StepForm } from "./step-form";
 
 type Shot = { blob: Blob; url: string };
 
-const POLL_MS = 5000;
+const POLL_MS = 15000;
 
 /**
  * Live selfie for photo verification. It only uses the camera (no file picker),
  * and asks for a random pose, so a saved photo can't be passed off as live.
- * The server compares it with the profile photos in a few seconds; clear
- * results come back straight away, and unsure ones ask for a clearer retake, so
- * no admin is needed. A selfie still pending from before is re-checked while
- * this slide waits. The profile preview stays locked until it's verified.
+ * An admin compares it with the profile photos and approves or rejects it, so
+ * this slide waits (and checks back) until they have. The profile preview
+ * stays locked until it's verified.
  */
 export function SelfieStep({ draft, update, onDone }: StepProps) {
   const video = useRef<HTMLVideoElement>(null);
@@ -38,7 +37,7 @@ export function SelfieStep({ draft, update, onDone }: StepProps) {
 
   useEffect(() => () => void (shot && URL.revokeObjectURL(shot.url)), [shot]);
 
-  // While pending, check back; each check re-runs the automatic match.
+  // While pending, check back for the admin's decision.
   useEffect(() => {
     if (status !== "pending") return;
     const timer = setInterval(async () => {
@@ -91,16 +90,16 @@ export function SelfieStep({ draft, update, onDone }: StepProps) {
 
   return (
     <StepForm
-      title={verified ? "You're verified!" : waiting ? "Checking your selfie" : "Verify it's you"}
+      title={verified ? "You're verified!" : waiting ? "Waiting for review" : "Verify it's you"}
       description={
         verified
           ? "Your selfie matches your photos. Your profile will show a verified badge."
           : waiting
-            ? "We're comparing it with your photos. This only takes a few seconds."
-            : "Take a quick live selfie. We compare it with your photos so everyone on Companion knows profiles are real. It's never shown on your profile."
+            ? "Our team is comparing your selfie with your photos. We'll send you a notification as soon as it's done."
+            : "Take a quick live selfie. Our team compares it with your photos so everyone on Companion knows profiles are real. It's never shown on your profile."
       }
-      submitLabel={verified ? "See my profile" : waiting ? "Checking…" : "Submit selfie"}
-      pendingLabel={shot ? "Checking your selfie…" : "Loading…"}
+      submitLabel={verified ? "See my profile" : waiting ? "In review…" : "Submit selfie"}
+      pendingLabel={shot ? "Sending your selfie…" : "Loading…"}
       canSubmit={verified || !!shot}
       hideSubmit={!!stream}
       onSubmit={async () => {
@@ -113,7 +112,7 @@ export function SelfieStep({ draft, update, onDone }: StepProps) {
         body.set("pose", pose ?? "");
         const result = await submitSelfie(body);
         if (!result.ok) return result;
-        // Stay on this slide to show the result (verified, rejected or in review).
+        // Stay on this slide while it's in review.
         submitted.current = null;
         update({ selfie: result.selfie });
         setShot(null);
@@ -170,9 +169,9 @@ export function SelfieStep({ draft, update, onDone }: StepProps) {
               className="size-8 shrink-0 animate-spin rounded-full border-[3px] border-muted border-t-primary"
             />
             <div className="text-sm">
-              <p className="font-medium">Checking your selfie</p>
+              <p className="font-medium">Your selfie is in review</p>
               <p className="mt-0.5 text-muted-foreground">
-                If it takes more than a minute, retake the selfie to check again.
+                You can close this page and come back later. Retake it only if the photo wasn&apos;t clear.
               </p>
             </div>
           </div>
@@ -203,7 +202,7 @@ export function SelfieStep({ draft, update, onDone }: StepProps) {
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
               {/* eslint-disable-next-line @next/next/no-img-element -- private, auth-gated image */}
               <img src={draft.photos[0].url} alt="" className="size-12 rounded-full object-cover" />
-              We&apos;ll compare it with your main photo.
+              It&apos;s compared with your profile photos.
             </div>
           )}
 

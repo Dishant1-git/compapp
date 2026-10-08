@@ -442,15 +442,13 @@ export async function listReports(filters: {
 
 export type AdminSelfieReview = {
   profileId: string;
-  user: { id: string; name: string; phone?: string };
+  user: { id: string; name: string; phone?: string; email?: string };
   selfieId: string;
   selfieUrl: string;
   pose: string;
   photoUrls: string[];
   status: "pending" | "verified" | "rejected";
   note?: string;
-  /** From the automatic face check; lower = more alike. */
-  matchDistance?: number;
   submittedAt?: string;
   reviewedAt?: string;
 };
@@ -462,13 +460,18 @@ export async function listSelfieReviews(status: AdminSelfieReview["status"]): Pr
   const profiles = await CompanionProfile.find({ "selfie.status": status, "selfie.image": { $exists: true } })
     .sort({ "selfie.submittedAt": status === "pending" ? 1 : -1 })
     .limit(PAGE)
-    .populate<{ user: LeanUser | null }>("user", "name phone")
+    .populate<{ user: LeanUser | null }>("user", "name phone email")
     .lean();
 
   return profiles.map((p) => ({
     profileId: String(p._id),
     user: p.user
-      ? { id: String(p.user._id), name: p.user.name, phone: p.user.phone ?? undefined }
+      ? {
+          id: String(p.user._id),
+          name: p.user.name,
+          phone: p.user.phone ?? undefined,
+          email: p.user.email ?? undefined,
+        }
       : { id: "", name: "Deleted user" },
     selfieId: String(p.selfie!.image),
     selfieUrl: imageUrl(String(p.selfie!.image)),
@@ -476,7 +479,6 @@ export async function listSelfieReviews(status: AdminSelfieReview["status"]): Pr
     photoUrls: p.photos.map((id) => imageUrl(String(id))),
     status,
     note: p.selfie?.note ?? undefined,
-    matchDistance: p.selfie?.matchDistance ?? undefined,
     submittedAt: iso(p.selfie?.submittedAt),
     reviewedAt: iso(p.selfie?.reviewedAt),
   }));

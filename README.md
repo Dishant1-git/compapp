@@ -30,8 +30,18 @@ Demo logins (password `password123`). Each role lands on its own home page after
 
 `npm run seed` only replaces `@demo.test` accounts and their data, so it's safe to re-run.
 
-**Your real admin account:** register normally at `/register`, then run
-`npm run make-admin -- you@example.com`. After that, admins can promote others from `/admin/users`.
+**Your real admin account** is created automatically the first time the server starts
+(`npm run dev` or `npm start`), and left alone on every start after that:
+
+- Email: `ADMIN_EMAIL`, default `codebynidhi1007@gmail.com`.
+- Password: `ADMIN_PASSWORD`. Without one, development makes up a random password and prints
+  it in the terminal once, on the line starting `[admin]`. Production creates nothing until
+  `ADMIN_PASSWORD` is set. Forgot it? Use "Forgot password" on `/login`.
+- If an account with that email already exists, nothing is created or changed.
+
+`npm run seed:admin` does the same without starting the site (`src/lib/db/admin-seed.ts`).
+To make another existing account an admin: `npm run make-admin -- you@example.com`, or
+promote them from `/admin/users`.
 
 ## Deploying
 
@@ -58,7 +68,9 @@ the login cookie is only sent over HTTPS in production. If you use nginx, allow 
 | `APP_URL` | Links in emails, e.g. `https://example.com`. |
 | `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET` | Payments. Live keys (`rzp_live_…`) to collect real money. |
 | `RAZORPAY_WEBHOOK_SECRET` | Confirming payments when the payer closes the tab. In the Razorpay dashboard add a webhook to `https://<domain>/api/payments/razorpay/webhook` for `payment.captured`. |
-| `BREVO_API_KEY`, `BREVO_SENDER_EMAIL` | Verification emails. Authorise the server's IP in Brevo (Security > Authorised IPs). |
+| `SMTP_USER`, `SMTP_PASS` **or** `BREVO_API_KEY`, `BREVO_SENDER_EMAIL` | Verification emails, and the email to the admin about new profiles. SMTP goes through nodemailer (for Gmail: the address and an app password) and is used first if set. For Brevo, authorise the server's IP in Brevo (Security > Authorised IPs). |
+| `ADMIN_EMAIL`, `ADMIN_PASSWORD` | The admin account the server creates on its first start. Production needs `ADMIN_PASSWORD` (8+ characters) to create it. |
+| `VERIFICATION_ADMIN_EMAIL` | Optional. Who is emailed when a Companion profile needs verifying (commas for several). |
 | One SMS provider (`TWILIO_…`, `MSG91_…` or `FAST2SMS_API_KEY`) | Phone sign-in and Companion sign-up. |
 
 On start-up the server logs a `[config]` warning for each optional setting that is missing.
@@ -94,7 +106,7 @@ so it works in the split too.
 **After the first deploy**
 
 1. Don't run `npm run seed` against the production database: it creates demo accounts with a known password.
-2. Register your own account on the site, then make it an admin: `npm run make-admin -- you@example.com` (run with the production `MONGODB_URI`).
+2. Set `ADMIN_EMAIL` and `ADMIN_PASSWORD` before the first start: the server creates that admin account by itself. (Or register an account on the site and run `npm run make-admin -- you@example.com` with the production `MONGODB_URI`.)
 3. Set `support.email` in `src/lib/site-config.ts`; it appears on `/terms`, `/privacy` and `/refunds`.
 4. Point your host's health check at `/api/health` (200 when the database is reachable).
 
@@ -206,13 +218,14 @@ sexual orientation → interests → drinking & smoking → photos → live self
   (`CompanionImage`), served from `/api/companion/images/[id]`. Selfies are only visible to
   their owner and admins.
 - **Selfie verification:** the selfie is taken live with the camera and a random pose, then
-  compared with the profile photos on the server in a few seconds, free, with no API keys
-  (face-api on TensorFlow.js/WebAssembly, `src/lib/companion/face-match.ts`). Face distance
-  ≤ 0.50 is verified instantly; anything above is rejected with a reason (between 0.50 and
-  0.60, tips for a clearer retake). No admin is needed; if the check itself errors, they're
-  asked to try again. **`/admin/verifications`** remains as a log. The profile preview and
-  `/companion` only unlock once verified. The pose isn't checked automatically.
-  Thresholds live in `src/lib/companion/verification.ts`.
+  waits for an admin. At **`/admin/verifications`** the admin sees the selfie next to the
+  profile photos and clicks **Approve** or **Reject** (with a reason the person sees). The
+  person gets an in-app notification either way; a rejected one is asked to retake it. The
+  profile preview and `/companion` only unlock once approved.
+- **Email to the admin:** each new request emails `VERIFICATION_ADMIN_EMAIL` (default
+  `codebynidhi1007@gmail.com`, set in `src/lib/companion/review-request.ts`) with a link to
+  the review page. That person needs an admin account to open it. Every submission sends one,
+  retakes included.
 - **Photo moderation:** every uploaded profile photo is checked on the server before it's
   saved, free and self-hosted (`src/lib/companion/moderation.ts`): nudity (NSFWJS), possible
   minors (face-api age estimate), no clear face / no clear main person / too many people,
@@ -238,7 +251,7 @@ Most everyday changes are one file. Find what you want to change here:
 | The order of the Companion sign-up slides | `JOIN_STEPS` in `src/lib/companion/constants.ts` |
 | The wording or fields on a Companion slide | `src/components/companion/about-steps.tsx` (one function per slide: `BirthdayStep`, `LookStep`, `LocationStep`, …) |
 | "Use my current location" messages and timeouts | `LOCATION_MESSAGES` and the `LOCATE_…` values above `LocationStep` in `src/components/companion/about-steps.tsx` |
-| Selfie match strictness | `src/lib/companion/verification.ts` |
+| Who is emailed about new profiles to verify | `VERIFICATION_ADMIN_EMAIL`, or the default in `src/lib/companion/review-request.ts` |
 | Photo rules (nudity, blur, face size) | `src/lib/companion/moderation.ts` |
 | OTP length, expiry, resend limits | `src/lib/auth/otp.ts` |
 | How trips are matched or trust is scored | `src/lib/trips/matching.ts`, `src/lib/trips/trust.ts` |
@@ -290,7 +303,7 @@ Coordinates are rounded to about 1 km before saving (`saveLocation` in
 
 | Error | Cause and fix |
 |---|---|
-| `querySrv ECONNREFUSED _mongodb._tcp.…` | Node couldn't look up the Atlas address on this network. `src/lib/db/dns.ts` switches to public DNS (1.1.1.1, 8.8.8.8) when this happens; restart `npm run dev`. If it persists, check the internet connection or a firewall blocking DNS. |
+| `querySrv ECONNREFUSED _mongodb._tcp.…` | Node couldn't look up the Atlas address on this network. `src/lib/db/dns.ts` then looks it up itself through public DNS (1.1.1.1, 8.8.8.8) and connects, so you should not see this any more. If you do, there is no internet connection, or a firewall is blocking DNS to those servers. |
 | `MONGODB_URI is not set` | Copy `.env.example` to `.env.local` and fill it in. |
 | `MongoServerSelectionError` / timeout | In Atlas, add your IP under Network Access, and check the username and password in `MONGODB_URI`. |
 | Camera or location does nothing on a phone | The page must be `https`. |
@@ -302,6 +315,7 @@ in `.env.local`, which is not.
 
 ```
 scripts/seed.ts               # Demo data
+scripts/seed-admin.ts         # Create the admin account (the server also does this on start)
 scripts/make-admin.ts         # Promote an account to admin
 src/
 ├── app/
@@ -332,7 +346,7 @@ src/
     ├── auth/                 # Session, DAL (requireUser, safeNext), sign-in actions, phone OTP + SMS
     ├── admin/  agency/       # queries.ts (reads) + actions.ts (writes) per area
     ├── trips/                # queries, actions, chat, cancel, matching, trust, …
-    ├── companion/            # Onboarding actions, queries, moderation, selfie check
+    ├── companion/            # Onboarding actions, queries, moderation, review-request email
     ├── notifications.ts      # notify() + reads
     └── form-utils.ts         # Shared Server Action parsing
 ```

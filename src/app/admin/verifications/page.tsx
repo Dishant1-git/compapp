@@ -13,8 +13,6 @@ export const metadata: Metadata = { title: "Photo verification" };
 
 const STATUSES: AdminSelfieReview["status"][] = ["pending", "verified", "rejected"];
 
-const matchLabel = (d: number) => (d <= 0.45 ? "strong" : d <= 0.6 ? "unsure" : "weak");
-
 export default async function AdminVerificationsPage({ searchParams }: PageProps<"/admin/verifications">) {
   const params = await searchParams;
   const requested = one(params.status) as AdminSelfieReview["status"] | undefined;
@@ -25,7 +23,7 @@ export default async function AdminVerificationsPage({ searchParams }: PageProps
     <>
       <AdminHeader
         title="Photo verification"
-        description="Clear matches and mismatches are decided automatically. Selfies the face check wasn't sure about wait here: check it's the same person as the profile photos, doing the requested pose."
+        description="Every new Companion profile waits here. Compare the live selfie with the profile photos: approve if it's the same person doing the requested pose, otherwise reject with a reason."
       />
       <FilterTabs
         base="/admin/verifications"
@@ -53,7 +51,7 @@ export default async function AdminVerificationsPage({ searchParams }: PageProps
                       <p className="font-semibold">{r.user.name}</p>
                     )}
                     <p className="text-sm text-muted-foreground">
-                      {[r.user.phone, r.submittedAt && `submitted ${formatDate(r.submittedAt)}`]
+                      {[r.user.phone, r.user.email, r.submittedAt && `submitted ${formatDate(r.submittedAt)}`]
                         .filter(Boolean)
                         .join(" · ")}
                     </p>
@@ -89,13 +87,6 @@ export default async function AdminVerificationsPage({ searchParams }: PageProps
                   </div>
                 </div>
 
-                {r.matchDistance !== undefined && (
-                  <p className="mt-4 text-sm text-muted-foreground">
-                    Automatic face match:{" "}
-                    <span className="font-medium text-foreground">{matchLabel(r.matchDistance)}</span> (distance{" "}
-                    {r.matchDistance.toFixed(2)}; under 0.45 is auto-verified, over 0.60 auto-rejected)
-                  </p>
-                )}
                 {r.note && <p className="mt-4 rounded-lg bg-muted px-3 py-2 text-sm">Reason given: {r.note}</p>}
 
                 {r.status === "pending" && (

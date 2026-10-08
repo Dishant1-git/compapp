@@ -7,7 +7,7 @@ services:
     region: singapore
     # Companion's photo checks keep TensorFlow models in memory and need about 550 MB on
     # their own, on top of the site itself. The 512 MB plans (free, starter) run out during
-    # a photo or selfie check and Render restarts the service, so this needs 2 GB.
+    # a photo check and Render restarts the service, so this needs 2 GB.
     plan: standard
     buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
@@ -37,7 +37,20 @@ services:
       # From the Razorpay dashboard, for the webhook at <APP_URL>/api/payments/razorpay/webhook.
       - key: RAZORPAY_WEBHOOK_SECRET
         sync: false
+      # Email: either SMTP (nodemailer; for Gmail, the address and an app password) or Brevo.
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
       - key: BREVO_API_KEY
         sync: false
       - key: BREVO_SENDER_EMAIL
+        sync: false
+      # The admin account, created on the first start. Leave ADMIN_EMAIL empty for the default.
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      # Optional: who is emailed when a Companion profile needs photo verification.
+      - key: VERIFICATION_ADMIN_EMAIL
         sync: false

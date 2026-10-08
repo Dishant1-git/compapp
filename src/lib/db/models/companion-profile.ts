@@ -56,8 +56,6 @@ const companionProfileSchema = new Schema(
       submittedAt: Date,
       reviewedAt: Date,
       note: String,
-      // Face-match distance from the automatic check (lower = more alike).
-      matchDistance: Number,
     },
   },
   { timestamps: true },

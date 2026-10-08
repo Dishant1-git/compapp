@@ -36,7 +36,7 @@ export async function siteOrigin() {
   return `${proto}://${host}`;
 }
 
-const escapeHtml = (value: string) =>
+export const escapeHtml = (value: string) =>
   value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
 export type VerificationSent =

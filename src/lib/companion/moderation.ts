@@ -1,12 +1,12 @@
 import "server-only";
 import { createRequire } from "node:module";
 import path from "node:path";
-import { findFaces, loadModels, type Face } from "./face-match";
+import { findFaces, loadModels } from "./face-match";
 
 /**
  * Automatic checks on profile photos before they're saved: free and self-hosted,
- * like the face match, with no admin in the loop. Rejections carry a reason the
- * user can act on.
+ * with no admin in the loop. Rejections carry a reason the user can act on.
+ * (Whether the selfie shows the same person is decided by an admin instead.)
  *
  * Covered: nudity and sexual content (NSFWJS), possible minors (face-api's age
  * estimate), no clear face or no clear main person, too many people, faces too
@@ -16,8 +16,7 @@ import { findFaces, loadModels, type Face } from "./face-match";
  */
 
 type Check = { ok: true } | { ok: false; reason: string };
-/** `faces` is every face found in an accepted photo, so the selfie check can reuse them. */
-export type ModerationResult = { ok: true; faces: Face[] } | { ok: false; reason: string };
+export type ModerationResult = Check;
 
 /** Smallest side, in px, of a usable photo. The upload step resizes to 1280. */
 const MIN_SIDE = 320;
@@ -195,5 +194,5 @@ async function checkFaces(image: Buffer): Promise<ModerationResult> {
   if (faces.some((f) => f.age < MIN_ESTIMATED_AGE)) {
     return reject("This photo looks like it may include someone under 18, which isn't allowed.");
   }
-  return { ok: true, faces: found };
+  return { ok: true };
 }

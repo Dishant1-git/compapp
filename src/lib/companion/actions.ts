@@ -35,8 +35,7 @@ import {
 import { moderatePhoto } from "./moderation";
 import { getCompanionAccount, getCompanionDraft } from "./queries";
 import { imageUrl, resumeStep, type ActionResult, type CompanionDraft, type SelfieStatus } from "./types";
-import { findFaces } from "./face-match";
-import { toKnownFaces, verifySelfie, type KnownFace } from "./verification";
+import { emailReviewRequest } from "./review-request";
 import { isFrontend, remoteAction } from "@/lib/remote";
 
 const fail = (error: string) => ({ ok: false as const, error });
@@ -292,7 +291,6 @@ export async function uploadPhoto(
     contentType: image.contentType,
     bytes: image.data.length,
     data: image.data,
-    faces: toKnownFaces(verdict.faces),
   });
   await CompanionProfile.updateOne(
     { user: viewer.id },
@@ -331,15 +329,6 @@ export async function submitSelfie(
   const profile = await CompanionProfile.findOne({ user: viewer.id }).select("photos selfie").lean();
   if (!profile?.photos.length) return fail("Add a profile photo first.");
 
-  let decision;
-  try {
-    decision = await verifySelfie({ selfie: image.data, photos: await photoFaces(viewer.id, profile.photos) });
-  } catch (error) {
-    console.error("Automatic selfie check failed", error);
-    return fail("We couldn't check your selfie just now. Try again in a minute.");
-  }
-  const { status, note, distance } = decision;
-
   const doc = await CompanionImage.create({
     owner: viewer.id,
     kind: "selfie",
@@ -347,87 +336,32 @@ export async function submitSelfie(
     bytes: image.data.length,
     data: image.data,
   });
+  // An admin compares it with the profile photos and decides (see /admin/verifications).
   await CompanionProfile.updateOne(
     { user: viewer.id },
-    {
-      $set: {
-        selfie: {
-          image: doc._id,
-          pose,
-          status,
-          note,
-          matchDistance: distance,
-          submittedAt: new Date(),
-          reviewedAt: new Date(), // decided automatically
-        },
-      },
-    },
+    { $set: { selfie: { image: doc._id, pose, status: "pending", submittedAt: new Date() } } },
   );
   if (profile.selfie?.image) {
     await CompanionImage.deleteOne({ _id: profile.selfie.image, owner: viewer.id, kind: "selfie" });
   }
-  await User.updateOne({ _id: viewer.id }, { $set: { "verification.identity": status === "verified" } });
+  await User.updateOne({ _id: viewer.id }, { $set: { "verification.identity": false } });
 
-  return { ok: true, selfie: { status, url: imageUrl(String(doc._id)), note } };
+  // Every submission emails the admin, retakes included.
+  const account = await User.findById(viewer.id).select("name phone email").lean();
+  await emailReviewRequest({ name: account?.name ?? "Someone", phone: account?.phone, email: account?.email });
+
+  return { ok: true, selfie: { status: "pending", url: imageUrl(String(doc._id)) } };
 }
 
-/**
- * Current review state of the latest selfie; polled while it's pending.
- * Pending selfies are left over from when unsure checks waited for an admin,
- * so they're decided automatically here.
- */
+/** Current review state of the latest selfie; polled while it waits for an admin. */
 export async function getSelfieStatus(): Promise<{ status: SelfieStatus; note?: string } | null> {
   if (isFrontend()) return remoteAction("companion/actions.getSelfieStatus", []);
   const viewer = await companionUser();
   if (!viewer) return null;
-  const profile = await CompanionProfile.findOne({ user: viewer.id }).select("photos selfie").lean();
+  const profile = await CompanionProfile.findOne({ user: viewer.id }).select("selfie").lean();
   const selfie = profile?.selfie;
-  if (!profile || !selfie?.status) return null;
-  if (selfie.status !== "pending" || !selfie.image) {
-    return { status: selfie.status as SelfieStatus, note: selfie.note ?? undefined };
-  }
-
-  const shot = await CompanionImage.findOne({ _id: selfie.image, owner: viewer.id, kind: "selfie" }).select("+data");
-  if (!shot) return { status: "pending" };
-  let decision;
-  try {
-    decision = await verifySelfie({ selfie: shot.data, photos: await photoFaces(viewer.id, profile.photos) });
-  } catch (error) {
-    console.error("Automatic selfie re-check failed", error);
-    return { status: "pending" }; // tried again on the next poll
-  }
-  const { status, note, distance } = decision;
-  // Only if it's still the same selfie, so a retake taken meanwhile wins.
-  const updated = await CompanionProfile.updateOne(
-    { user: viewer.id, "selfie.image": selfie.image, "selfie.status": "pending" },
-    { $set: { "selfie.status": status, "selfie.note": note, "selfie.matchDistance": distance, "selfie.reviewedAt": new Date() } },
-  );
-  if (updated.modifiedCount) {
-    await User.updateOne({ _id: viewer.id }, { $set: { "verification.identity": status === "verified" } });
-  }
-  return { status, note };
-}
-
-/**
- * The faces in each profile photo, main photo first, for the face match. They are
- * saved with the photo when it's uploaded; a photo from before that is scanned the
- * first time it's needed (only if the match gets that far) and then remembered.
- */
-async function photoFaces(userId: string, ids: unknown[]) {
-  const found = await CompanionImage.find({ _id: { $in: ids }, owner: userId }).select("+faces").lean();
-  const order = ids.map(String);
-  return found
-    .sort((a, b) => order.indexOf(String(a._id)) - order.indexOf(String(b._id)))
-    .map((photo) => async (): Promise<KnownFace[]> => {
-      if (photo.faces) {
-        return photo.faces.map((f) => ({ descriptor: f.descriptor, score: f.score ?? 0, width: f.width ?? 0 }));
-      }
-      const stored = await CompanionImage.findById(photo._id).select("+data");
-      if (!stored) return [];
-      const faces = toKnownFaces(await findFaces(stored.data));
-      await CompanionImage.updateOne({ _id: photo._id }, { $set: { faces } });
-      return faces;
-    });
+  if (!selfie?.status) return null;
+  return { status: selfie.status as SelfieStatus, note: selfie.note ?? undefined };
 }
 
 // ─── Done ────────────────────────────────────────────────────────────────────
